@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"todo-backend/src/models/account"
 	Service "todo-backend/src/servicetemplates"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -18,12 +19,19 @@ type Trainer struct {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Add("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(msg{Title: "This is the Signup-Api"})
+}
+
+func signup(w http.ResponseWriter, r *http.Request) {
 	//w.Header().Set("Content-Type", "application/json")
 
-	collection := Service.DB.Database("test").Collection("trainers")
+	collection := Service.DBConn.Database("test").Collection("trainers")
 
 	var result Trainer
 	filter := bson.D{{"name", "Ash"}}
+	account.Login()
 
 	err := collection.FindOne(context.TODO(), filter).Decode(&result)
 	if err != nil {
@@ -34,15 +42,18 @@ func home(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-var mainRoute = Service.RouteBinding{"/", home, "GET"}
+var homeRoute = Service.RouteBinding{"/api/", home, "GET"}
+var signupRoute = Service.RouteBinding{"/api/signup", signup, "POST"}
 
-var Routes = []Service.RouteBinding{mainRoute}
+//Routes : an array of route bindings
+var Routes = []Service.RouteBinding{homeRoute}
 
+//ServiceName : service name
 var ServiceName = "Signup-api"
 
+//Port : service port
 var Port = "8081"
 
-//fmt.Println(template.MyAsshole)
 // router := mux.NewRouter().StrictSlash(true)
 
 // router.HandleFunc("/", home)

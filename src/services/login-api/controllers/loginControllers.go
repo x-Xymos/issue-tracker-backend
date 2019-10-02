@@ -56,7 +56,7 @@ func home(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(msg{Title: "This is the Login-Api"})
 }
 
-var mainRoute = Service.RouteBinding{"/", home, "GET"}
+var mainRoute = Service.RouteBinding{"/api/", home, "GET"}
 
 var Routes = []Service.RouteBinding{mainRoute}
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"todo-backend/src/auth"
 	"todo-backend/src/servicetemplates/db"
 
 	"github.com/gorilla/mux"
@@ -17,8 +18,8 @@ type RouteBinding struct {
 	Method   string
 }
 
-//DB : creates a DB connection that is used by a service
-var DB = db.Connect()
+//DBConn : creates a DB connection that is used by the service
+var DBConn = db.Connect()
 
 //Start : start listener
 //requires a routes array containing all
@@ -26,6 +27,8 @@ var DB = db.Connect()
 func Start(routes *[]RouteBinding, port *string, serviceName *string) {
 
 	router := mux.NewRouter().StrictSlash(true)
+	router.Use(auth.JwtAuthentication) //attach JWT auth middleware
+
 	if len(*routes) == 0 {
 		fmt.Println("Error: no bind routes specified for service")
 		os.Exit(1)
