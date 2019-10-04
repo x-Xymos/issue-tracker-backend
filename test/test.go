@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -36,45 +37,69 @@ type Trainer struct {
 	City string
 }
 
-func search(db *mongo.Client) {
-	collection := db.Database("test").Collection("trainers")
+type Account struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Token    string `json:"token"`
+}
 
-	//var result Trainer
-	filter := bson.D{{"name", "Ashs"}}
+func insert(db *mongo.Client) {
+	collection := db.Database("test").Collection("accounts")
 
-	err := collection.FindOne(context.TODO(), filter).Err()
+	info := Account{"Xymos4", "xymos4@gmail.com", "rootroot4", "testtoken4"}
+
+	newAcc := Account{info.Username, info.Email, info.Password, info.Token}
+
+	insertResult, err := collection.InsertOne(context.TODO(), newAcc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	insertResultId := insertResult.InsertedID.(primitive.ObjectID).Hex()
+
+	fmt.Println("Inserted a single document: ", insertResultId)
+
+	//searchByObjectId(db, &insertResultId)
+
+}
+
+func searchByObjectId(db *mongo.Client, id *primitive.ObjectID) {
+
+	collection := db.Database("test").Collection("accounts")
+
+	//searching by object id
+	result := &Account{}
+	//objID, _ := primitive.ObjectIDFromHex("5d97999a4f55a15083dffd8f")
+	filter := bson.D{{"_id", id}}
+
+	err := collection.FindOne(context.TODO(), filter).Decode(&result)
 
 	if err != nil {
-		if err.Error() == "mongo: no documents in result" {
+		if err == mongo.ErrNoDocuments {
 			fmt.Println(err)
-			return
 		} else {
 			log.Fatal(err)
 		}
 	}
-
+	fmt.Println(result)
 }
 
 func main() {
 
-	DBConn := Connect()
-	search(DBConn)
-	//collection := DBConn.Database("test").Collection("trainers")
+	//DBConn := Connect()
 
-	// var result Trainer
-	// filter := bson.D{{"name", "Ashs"}}
+	//search(DBConn)
+	//insert(DBConn)
+	newAcc := Account{Username: "hehexd", Email: "email@email.com", Password: "root", Token: "asd"}
+	fmt.Println(newAcc)
+	// pass := "hehexd"
+	// hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	// Password := string(hashedPassword)
 
-	// err := collection.FindOne(context.TODO(), filter).Err()
+	// fmt.Println(Password)
 
-	// if err != nil {
-	// 	if err.Error() == "mongo: no documents in result" {
-	// 		fmt.Println(err)
-	// 		return
-	// 	} else {
-	// 		log.Fatal(err)
-	// 	}
-	// }
-
-	//fmt.Printf("%+v\n", result)
+	// pass2 := "hehexd2"
+	// err := bcrypt.CompareHashAndPassword([]byte(Password), []byte(pass2))
+	// fmt.Println(err)
 
 }

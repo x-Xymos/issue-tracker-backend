@@ -2,14 +2,12 @@ package signupcont
 
 import (
 	//"context"
-	"context"
-	"encoding/json"
-	"log"
-	"net/http"
-	"todo-backend/src/models/account"
-	Service "todo-backend/src/servicetemplates"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"encoding/json"
+	"net/http"
+	AccountModel "todo-backend/src/models/account"
+	Service "todo-backend/src/servicetemplates"
+	u "todo-backend/src/utils"
 )
 
 type Trainer struct {
@@ -20,33 +18,32 @@ type Trainer struct {
 
 func home(w http.ResponseWriter, r *http.Request) {
 
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(msg{Title: "This is the Signup-Api"})
+	//w.Header().Add("Content-Type", "application/json")
+	//json.NewEncoder(w).Encode("{Title: "This is the Signup-Api"}")
+	u.Respond(w, u.Message(false, "This is the Signup-Api"))
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
-	//w.Header().Set("Content-Type", "application/json")
 
-	collection := Service.DBConn.Database("test").Collection("trainers")
+	account := &AccountModel.Account{}
 
-	var result Trainer
-	filter := bson.D{{"name", "Ash"}}
-	account.Login()
-
-	err := collection.FindOne(context.TODO(), filter).Decode(&result)
+	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 	if err != nil {
-		log.Fatal(err)
+		u.Respond(w, u.Message(false, "Invalid request"))
+		return
 	}
-	//fmt.Printf("Found a single document: %+v\n", result)
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+
+	resp := account.Create(Service.DBConn) //Create account
+	u.Respond(w, resp)
+
+	// w.Header().Add("Content-Type", "application/json")
+	// json.NewEncoder(w).Encode(result)
 }
 
-var homeRoute = Service.RouteBinding{"/api/", home, "GET"}
-var signupRoute = Service.RouteBinding{"/api/signup", signup, "POST"}
-
 //Routes : an array of route bindings
-var Routes = []Service.RouteBinding{homeRoute}
+var Routes = []Service.RouteBinding{
+	Service.RouteBinding{"/api/", home, "GET"},
+	Service.RouteBinding{"/api/signup", signup, "POST"}}
 
 //ServiceName : service name
 var ServiceName = "Signup-api"
