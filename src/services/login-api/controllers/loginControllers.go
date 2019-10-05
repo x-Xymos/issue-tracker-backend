@@ -1,127 +1,43 @@
 package logincont
 
 import (
-	//"context"
 	"encoding/json"
 	"net/http"
+	AccountModel "todo-backend/src/models/account"
 	Service "todo-backend/src/servicetemplates"
-	//"strconv"
-	//"go.mongodb.org/mongo-driver/bson"
-	//"go.mongodb.org/mongo-driver/mongo"
-	//"go.mongodb.org/mongo-driver/mongo/options"
+	u "todo-backend/src/utils"
 )
 
-// type event struct {
-// 	ID          string `json:"ID"`
-// 	Title       string `json:"Title"`
-// 	Description string `json:"Description"`
-// }
+func login(w http.ResponseWriter, r *http.Request) {
 
-// type Trainer struct {
-// 	Name string
-// 	Age  int
-// 	City string
-// }
+	account := &AccountModel.Account{}
 
-// type allEvents []event
+	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
+	if err != nil {
+		u.Respond(w, u.Message(false, "Invalid request"))
+		return
+	}
 
-// var events = allEvents{
-// 	{
-// 		ID:          "1",
-// 		Title:       "Introduction to Golang",
-// 		Description: "Come join us for a chance to learn how golang works and get to eventually try it out",
-// 	},
-// }
+	resp := AccountModel.Login(account.Email, account.Password, Service.DBConn)
+	u.Respond(w, resp)
 
-// func getEvent(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json")
-// 	eventID := mux.Vars(r)["id"]
-// 	id, _ := strconv.Atoi(eventID)
-// 	json.NewEncoder(w).Encode(events[id])
-
-// }
-
-// func getAllEvents(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(events)
-// }
-
-type msg struct {
-	Title string `json:"Title"`
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(msg{Title: "This is the Login-Api"})
+	w.Header().Set("Content-Type", "application/json")
+	userID := r.Context().Value("user").(string)
+	json.NewEncoder(w).Encode(map[string]string{"Name": "This is the Login-Api", "UserID": userID})
+
 }
 
-var mainRoute = Service.RouteBinding{"/api/", home, "GET"}
+//Routes : an array of route bindings
+var Routes = []Service.RouteBinding{
+	Service.RouteBinding{"/api/", home, "GET"},
+	Service.RouteBinding{"/api/login", login, "POST"}}
 
-var Routes = []Service.RouteBinding{mainRoute}
-
+//ServiceName : service name
 var ServiceName = "Login-api"
 
+//Port : service port
 var Port = "8080"
-
-//fmt.Println(template.MyAsshole)
-// router := mux.NewRouter().StrictSlash(true)
-
-// router.HandleFunc("/", home)
-// //router.HandleFunc("/events", getAllEvents).Methods("GET")
-// //router.HandleFunc("/events/{id}", getEvent).Methods("GET")
-
-// fmt.Println("Started Service on 0.0.0.0:8080")
-
-// // Set client options
-// // clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-
-// // // Connect to MongoDB
-// // client, err := mongo.Connect(context.TODO(), clientOptions)
-// // if err != nil {
-// // 	log.Fatal(err)
-// // }
-// // // Check the connection
-// // err = client.Ping(context.TODO(), nil)
-// // if err != nil {
-// // 	log.Fatal(err)
-// // }
-
-// // fmt.Println("Connected to MongoDB!")
-// // collection := client.Database("test").Collection("trainers")
-
-// // ash := Trainer{"Ash", 10, "Pallet Town"}
-// // misty := Trainer{"Misty", 10, "Cerulean City"}
-// // brock := Trainer{"Brock", 15, "Pewter City"}
-
-// // insertResult, err := collection.InsertOne(context.TODO(), ash)
-// // if err != nil {
-// // 	log.Fatal(err)
-// // }
-// // fmt.Println("Inserted a single document: ", insertResult.InsertedID)
-
-// // trainers := []interface{}{misty, brock}
-
-// // insertManyResult, err := collection.InsertMany(context.TODO(), trainers)
-// // if err != nil {
-// // 	log.Fatal(err)
-// // }
-
-// // fmt.Println("Inserted multiple documents: ", insertManyResult.InsertedIDs)
-
-// // filter := bson.D{{"name", "Ash"}}
-
-// // update := bson.D{
-// // 	{"$inc", bson.D{
-// // 		{"age", 1},
-// // 	}},
-// // }
-
-// // updateResult, err := collection.UpdateOne(context.TODO(), filter, update)
-// // if err != nil {
-// // 	log.Fatal(err)
-// // }
-
-// // fmt.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
-
-// log.Fatal(http.ListenAndServe(":8080", router))

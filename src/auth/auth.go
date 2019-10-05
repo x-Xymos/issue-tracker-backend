@@ -3,9 +3,9 @@ package auth
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
-	"todo-backend/src/models/account"
+	"todo-backend/env"
+	AccountModel "todo-backend/src/models/account"
 	u "todo-backend/src/utils"
 
 	jwt "github.com/dgrijalva/jwt-go"
@@ -16,9 +16,9 @@ import (
 var JwtAuthentication = func(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		notAuth := []string{"/api/", "/api/signup", "/api/login"} //List of endpoints that doesn't require auth
-		requestPath := r.URL.Path                                 //current request path
+		//"/api/",
+		notAuth := []string{"/api/signup", "/api/login"} //List of endpoints that doesn't require auth
+		requestPath := r.URL.Path                        //current request path
 
 		//check if request does not need authentication, serve the request if it doesn't need it
 		for _, value := range notAuth {
@@ -49,11 +49,11 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 			return
 		}
 
-		tokenPart := splitToken[1] //Grab the token part, what we are truly interested in
-		tk := &account.Token{}
+		tokenStr := splitToken[1] //Grab the token part, what we are truly interested in
+		tk := &AccountModel.Token{}
 
-		token, err := jwt.ParseWithClaims(tokenPart, tk, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("token_password")), nil
+		token, err := jwt.ParseWithClaims(tokenStr, tk, func(token *jwt.Token) (interface{}, error) {
+			return []byte(env.TokenPassword), nil
 		})
 
 		if err != nil { //Malformed token, returns with http code 403 as usual

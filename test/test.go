@@ -38,19 +38,17 @@ type Trainer struct {
 }
 
 type Account struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Token    string `json:"token"`
+	UserID   primitive.ObjectID `bson:"_id, omitempty"`
+	Username string             `json:"username"`
+	Email    string             `json:"email"`
+	Password string             `json:"password"`
 }
 
 func insert(db *mongo.Client) {
 	collection := db.Database("test").Collection("accounts")
 
-	info := Account{"Xymos4", "xymos4@gmail.com", "rootroot4", "testtoken4"}
-
-	newAcc := Account{info.Username, info.Email, info.Password, info.Token}
-
+	newAcc := Account{UserID: primitive.NewObjectID(), Username: "jbpratt", Email: "jbpratt@gmail.com", Password: "rootroot4"}
+	//newAcc := Account{}
 	insertResult, err := collection.InsertOne(context.TODO(), newAcc)
 	if err != nil {
 		log.Fatal(err)
@@ -69,8 +67,8 @@ func searchByObjectId(db *mongo.Client, id *primitive.ObjectID) {
 
 	//searching by object id
 	result := &Account{}
-	//objID, _ := primitive.ObjectIDFromHex("5d97999a4f55a15083dffd8f")
-	filter := bson.D{{"_id", id}}
+
+	filter := bson.D{{"email", "jbpratt@gmail.com"}}
 
 	err := collection.FindOne(context.TODO(), filter).Decode(&result)
 
@@ -86,12 +84,14 @@ func searchByObjectId(db *mongo.Client, id *primitive.ObjectID) {
 
 func main() {
 
-	//DBConn := Connect()
+	DBConn := Connect()
 
-	//search(DBConn)
+	objID, _ := primitive.ObjectIDFromHex("5d97999a4f55a15083dffd8f")
+	searchByObjectId(DBConn, &objID)
+
 	//insert(DBConn)
-	newAcc := Account{Username: "hehexd", Email: "email@email.com", Password: "root", Token: "asd"}
-	fmt.Println(newAcc)
+	//newAcc := Account{Username: "hehexd", Email: "email@email.com", Password: "root", Token: "asd"}
+	//fmt.Println(newAcc)
 	// pass := "hehexd"
 	// hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	// Password := string(hashedPassword)

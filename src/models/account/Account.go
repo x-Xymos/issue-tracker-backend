@@ -16,10 +16,10 @@ import (
 
 //Account : user account struct
 type Account struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Token    string `json:"token"`
+	UserID   primitive.ObjectID `bson:"_id, omitempty"`
+	Username string             `json:"username"`
+	Email    string             `json:"email"`
+	Password string             `json:"password"`
 }
 
 //Token : JWT token struct
@@ -82,22 +82,22 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	account.Password = string(hashedPassword)
+	account.UserID = primitive.NewObjectID()
 
 	collection := DBConn.Database("todo").Collection("accounts")
 
-	insertResult, err := collection.InsertOne(context.TODO(), account)
+	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
 		log.Fatal(err)
 		return u.Message(false, "Failed to create account, connection error.")
 	}
 
-	UserID := insertResult.InsertedID.(primitive.ObjectID).Hex()
-
+	//UserID := account.UserID.Hex()
 	//Create new JWT token for the newly registered account
-	tk := &Token{UserID: UserID}
-	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
-	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
-	account.Token = tokenString
+	// tk := &Token{UserID: UserID}
+	// token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
+	// tokenString, _ := token.SignedString([]byte(env.TokenPassword))
+	// account.Token = tokenString
 
 	account.Password = "" //delete password
 
@@ -107,40 +107,40 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 }
 
 //Login : login
-// func Login(email string, password string, DBConn *mongo.Client) map[string]interface{} {
+func Login(email string, password string, DBConn *mongo.Client) map[string]interface{} {
 
-// 	account := &Account{}
+	account := &Account{}
 
-// 	collection := DBConn.Database("todo").Collection("accounts")
-// 	filter := bson.D{{"email", email}}
+	collection := DBConn.Database("todo").Collection("accounts")
 
-// 	err := collection.FindOne(context.TODO(), filter).Decode(&account)
+	emailFilter := bson.D{{"email", email}}
 
-// 	if err != nil {
-// 		if err.Error() == "mongo: no documents in result" {
-// 			return u.Message(false, "Email address not found.")
-// 		}
-// 		log.Fatal(err)
-// 		return u.Message(false, "Connection error.")
-// 	}
+	err := collection.FindOne(context.TODO(), emailFilter).Decode(&account)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return u.Message(false, "Email address doesn't match any accounts in our records, please try again")
+		}
+		log.Fatal(err)
+		return u.Message(false, "Connection error, please try again")
+	}
 
-// 	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(password))
-// 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
-// 		return u.Message(false, "Invalid login credentials. Please try again")
-// 	}
-// 	//Worked! Logged In
-// 	account.Password = ""
+	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(password))
+	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
+		return u.Message(false, "Invalid login credentials. Please try again")
+	}
+	//Worked! Logged In
+	account.Password = ""
 
-// 	//Create JWT token
-// 	tk := &Token{UserId: account.ID}
-// 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
-// 	tokenString, _ := token.SignedString([]byte(os.Getenv("token_password")))
-// 	account.Token = tokenString //Store the token in the response
+	//Create JWT token
+	tk := &Token{UserID: account.UserID.Hex()}
+	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
+	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
 
-// 	resp := u.Message(true, "Logged In")
-// 	resp["account"] = account
-// 	return resp
-// }
+	resp := u.Message(true, "Logged In")
+	resp["account"] = account
+	resp["token"] = tokenString
+	return resp
+}
 
 // func GetUser(u uint) *Account {
 
