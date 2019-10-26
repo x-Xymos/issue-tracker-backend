@@ -8,6 +8,7 @@ import (
 	"todo-backend/src/auth"
 	"todo-backend/src/servicetemplates/db"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -15,7 +16,7 @@ import (
 type RouteBinding struct {
 	Path     string
 	Function func(http.ResponseWriter, *http.Request)
-	Method   string
+	Method   []string
 }
 
 //DBConn : creates a DB connection that is used by the service
@@ -34,9 +35,24 @@ func Start(routes *[]RouteBinding, port *string, serviceName *string) {
 		os.Exit(1)
 	}
 	for _, route := range *routes {
-		router.HandleFunc(route.Path, route.Function).Methods(route.Method)
+		router.HandleFunc(route.Path, route.Function).Methods(route.Method...)
+
 	}
 	fmt.Printf("Started %s on 0.0.0.0:%s\n", *serviceName, *port)
 
-	log.Fatal(http.ListenAndServe(":"+*port, router))
+	//handler := cors.Default().Handler(router)
+
+	// c := cors.New(cors.Options{
+	// 	AllowedOrigins:   []string{"*"},
+	// 	AllowCredentials: true,
+	// 	//AllowedHeaders:   []string{"Authorization", "Access-Control-Allow-Credentials", "Access-Control-Allow-Headers", "Access-Control-Allow-Methods", "Access-Control-Allow-Origin", "Content-Length", "Content-Type", "transformRequest", "transformResponse", "xsrfCookieName", "xsrfHeaderName"},
+	// 	// Enable Debugging for testing, consider disabling in production
+	// 	Debug: true,
+	// })
+
+	// Insert the middleware
+	//handler = c.Handler(handler)
+
+	//log.Fatal(http.ListenAndServe(":"+*port, handler))
+	log.Fatal(http.ListenAndServe(":"+*port, handlers.CORS(handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}), handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), handlers.AllowedOrigins([]string{"*"}))(router)))
 }

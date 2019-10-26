@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"log"
 	"strings"
 	"todo-backend/env"
 	u "todo-backend/src/utils"
@@ -32,11 +31,11 @@ type Token struct {
 func (account *Account) Validate(DBConn *mongo.Client) (map[string]interface{}, bool) {
 
 	if !strings.Contains(account.Email, "@") {
-		return u.Message(false, "Email address is required"), false
+		return u.Message(false, "Invalid email address"), false
 	}
 
 	if len(account.Password) < 6 {
-		return u.Message(false, "Password is required"), false
+		return u.Message(false, "Password has to be at least 6 characters long"), false
 	}
 
 	tempAcc := &Account{}
@@ -48,7 +47,6 @@ func (account *Account) Validate(DBConn *mongo.Client) (map[string]interface{}, 
 
 	err := collection.FindOne(context.TODO(), emailFilter).Decode(&tempAcc)
 	if err != nil && err != mongo.ErrNoDocuments {
-		log.Fatal(err)
 		return u.Message(false, "Connection error, please try again"), false
 	}
 
@@ -61,8 +59,7 @@ func (account *Account) Validate(DBConn *mongo.Client) (map[string]interface{}, 
 
 	err = collection.FindOne(context.TODO(), usernameFilter).Decode(&tempAcc)
 
-	if err != mongo.ErrNoDocuments {
-		log.Fatal(err)
+	if err != mongo.ErrNoDocuments && err != nil {
 		return u.Message(false, "Connection error, please try again"), false
 	}
 
@@ -79,7 +76,6 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 	if resp, ok := account.Validate(DBConn); !ok {
 		return resp
 	}
-
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
@@ -88,16 +84,8 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
-		log.Fatal(err)
 		return u.Message(false, "Failed to create account, connection error.")
 	}
-
-	//UserID := account.UserID.Hex()
-	//Create new JWT token for the newly registered account
-	// tk := &Token{UserID: UserID}
-	// token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
-	// tokenString, _ := token.SignedString([]byte(env.TokenPassword))
-	// account.Token = tokenString
 
 	account.Password = "" //delete password
 
@@ -107,7 +95,7 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 }
 
 //Login : login
-func Login(email string, password string, DBConn *mongo.Client) map[string]interface{} {
+func Login(email *string, password *string, DBConn *mongo.Client) map[string]interface{} {
 
 	account := &Account{}
 
@@ -120,11 +108,10 @@ func Login(email string, password string, DBConn *mongo.Client) map[string]inter
 		if err == mongo.ErrNoDocuments {
 			return u.Message(false, "Email address doesn't match any accounts in our records, please try again")
 		}
-		log.Fatal(err)
 		return u.Message(false, "Connection error, please try again")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(password))
+	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(*password))
 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
 		return u.Message(false, "Invalid login credentials. Please try again")
 	}
@@ -142,14 +129,29 @@ func Login(email string, password string, DBConn *mongo.Client) map[string]inter
 	return resp
 }
 
-// func GetUser(u uint) *Account {
+//GetUser : Retrieve user information
+func GetUser(userID string, DBConn *mongo.Client) map[string]interface{} {
 
-// 	acc := &Account{}
-// 	GetDB().Table("accounts").Where("id = ?", u).First(acc)
-// 	if acc.Email == "" { //User not found!
-// 		return nil
-// 	}
+	account := &Account{}
 
-// 	acc.Password = ""
-// 	return acc
-// }
+	collection := DBConn.Database("todo").Collection("accounts")
+
+	objID, _ := primitive.ObjectIDFromHex(userID)
+	userIDFilter := bson.D{{"_id", objID}}
+
+	err := collection.FindOne(context.TODO(), userIDFilter).Decode(account)
+
+	account.Password = ""
+	resp := map[string]interface{}{"account": account}
+
+	if err != nil {
+		resp["status"] = false
+		if err == mongo.ErrNoDocuments {
+			return resp
+		}
+		return resp
+	}
+
+	resp["status"] = true
+	return resp
+}

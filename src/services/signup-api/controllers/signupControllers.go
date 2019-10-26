@@ -1,8 +1,6 @@
 package signupcont
 
 import (
-	//"context"
-
 	"encoding/json"
 	"net/http"
 	AccountModel "todo-backend/src/models/account"
@@ -21,24 +19,23 @@ func home(w http.ResponseWriter, r *http.Request) {
 func signup(w http.ResponseWriter, r *http.Request) {
 
 	account := &AccountModel.Account{}
-
 	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 	if err != nil {
 		u.Respond(w, u.Message(false, "Invalid request"))
 		return
 	}
-
 	resp := account.Create(Service.DBConn) //Create account
+
 	u.Respond(w, resp)
 }
 
 //Routes : an array of route bindings
 var Routes = []Service.RouteBinding{
-	Service.RouteBinding{"/api/", home, "GET"},
-	Service.RouteBinding{"/api/signup", signup, "POST"}}
+	Service.RouteBinding{"/api/", home, []string{"GET"}},
+	Service.RouteBinding{"/api/signup", signup, []string{"POST"}}}
 
 //ServiceName : service name
 var ServiceName = "Signup-api"
 
 //Port : service port
-var Port = "8081"
+var Port = "8881"
