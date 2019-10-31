@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"todo-backend/env"
 	u "todo-backend/src/utils"
@@ -23,8 +24,12 @@ type Account struct {
 
 //Token : JWT token struct
 type Token struct {
-	UserID string
+	UserID string `json:"UserID"`
 	jwt.StandardClaims
+}
+
+func emailValidator(email *string, DBConn *mongo.Client) bool {
+	return true
 }
 
 //Validate incoming user details when they register for a new account
@@ -95,15 +100,15 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 }
 
 //Login : login
-func Login(email *string, password *string, DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 
-	account := &Account{}
+	storedAccount := &Account{}
 
 	collection := DBConn.Database("todo").Collection("accounts")
 
-	emailFilter := bson.D{{"email", email}}
+	emailFilter := bson.D{{"email", account.Email}}
 
-	err := collection.FindOne(context.TODO(), emailFilter).Decode(&account)
+	err := collection.FindOne(context.TODO(), emailFilter).Decode(&storedAccount)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return u.Message(false, "Email address doesn't match any accounts in our records, please try again")
@@ -111,7 +116,7 @@ func Login(email *string, password *string, DBConn *mongo.Client) map[string]int
 		return u.Message(false, "Connection error, please try again")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(*password))
+	err = bcrypt.CompareHashAndPassword([]byte(storedAccount.Password), []byte(account.Password))
 	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
 		return u.Message(false, "Invalid login credentials. Please try again")
 	}
@@ -119,7 +124,7 @@ func Login(email *string, password *string, DBConn *mongo.Client) map[string]int
 	account.Password = ""
 
 	//Create JWT token
-	tk := &Token{UserID: account.UserID.Hex()}
+	tk := &Token{UserID: storedAccount.UserID.Hex()}
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
 
@@ -129,20 +134,58 @@ func Login(email *string, password *string, DBConn *mongo.Client) map[string]int
 	return resp
 }
 
-//GetUser : Retrieve user information
-func GetUser(userID string, DBConn *mongo.Client) map[string]interface{} {
-
-	account := &Account{}
+//GetProfile : Retrieve user information
+func (account *Account) GetProfile(DBConn *mongo.Client) map[string]interface{} {
 
 	collection := DBConn.Database("todo").Collection("accounts")
 
-	objID, _ := primitive.ObjectIDFromHex(userID)
-	userIDFilter := bson.D{{"_id", objID}}
+	userIDFilter := bson.D{{"_id", account.UserID}}
 
 	err := collection.FindOne(context.TODO(), userIDFilter).Decode(account)
 
 	account.Password = ""
 	resp := map[string]interface{}{"account": account}
+
+	if err != nil {
+		resp["status"] = false
+		if err == mongo.ErrNoDocuments {
+			return resp
+		}
+		return resp
+	}
+
+	resp["status"] = true
+	return resp
+}
+
+//UpdateProfile : Retrieve user information
+func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface{} {
+
+	if resp, ok := account.Validate(DBConn); !ok {
+		return resp
+	}
+
+	updatedAccount := map[string]string{
+		"username": account.Username,
+		"email":    account.Email,
+	}
+
+	if account.Password != "" {
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
+		updatedAccount["password"] = string(hashedPassword)
+	}
+
+	collection := DBConn.Database("todo").Collection("accounts")
+
+	userIDFilter := bson.D{{"_id", account.UserID}}
+	update := bson.D{
+		{"$set", updatedAccount},
+	}
+	updateResult, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
+
+	fmt.Println(updateResult)
+
+	resp := map[string]interface{}{}
 
 	if err != nil {
 		resp["status"] = false

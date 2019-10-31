@@ -17,8 +17,8 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//"/api/",
-		notAuth := []string{"/api/signup", "/api/login"} //List of endpoints that doesn't require auth
-		requestPath := r.URL.Path                        //current request path
+		notAuth := []string{"/api/account/login", "/api/account/signup"} //List of endpoints that doesn't require auth
+		requestPath := r.URL.Path                                        //current request path
 
 		//check if request does not need authentication, serve the request if it doesn't need it
 		for _, value := range notAuth {
@@ -31,8 +31,7 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 
 		response := make(map[string]interface{})
 		tokenHeader := r.Header.Get("Authorization") //Grab the token from the header
-
-		if tokenHeader == "" { //Token is missing, returns with error code 403 Unauthorized
+		if tokenHeader == "" {                       //Token is missing, returns with error code 403 Unauthorized
 			response = u.Message(false, "Missing auth token")
 			w.WriteHeader(http.StatusForbidden)
 			w.Header().Add("Content-Type", "application/json")
@@ -49,10 +48,10 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 			return
 		}
 
-		tokenStr := splitToken[1] //Grab the token part, what we are truly interested in
-		tk := &AccountModel.Token{}
+		tokenStr := splitToken[1] //Grab the token part
+		decodedToken := &AccountModel.Token{}
 
-		token, err := jwt.ParseWithClaims(tokenStr, tk, func(token *jwt.Token) (interface{}, error) {
+		token, err := jwt.ParseWithClaims(tokenStr, decodedToken, func(token *jwt.Token) (interface{}, error) {
 			return []byte(env.TokenPassword), nil
 		})
 
@@ -72,10 +71,8 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 			return
 		}
 
-		//Everything went well, proceed with the request and set the caller to the user retrieved from the parsed token
-		//fmt.Sprintf("User %", tk.Username) //Useful for monitoring
-		ctx := context.WithValue(r.Context(), "userID", tk.UserID)
+		ctx := context.WithValue(r.Context(), "userID", decodedToken.UserID)
 		r = r.WithContext(ctx)
-		next.ServeHTTP(w, r) //proceed in the middleware chain!
+		next.ServeHTTP(w, r)
 	})
 }
