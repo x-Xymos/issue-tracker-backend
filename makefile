@@ -1,7 +1,7 @@
 BUILD_DIR=build/
 
-SRC_NAME1=src/services/login-api/main/main.go
-BINARY_NAME1=login-api
+SRC_NAME1=src/services/account-api/main/main.go
+BINARY_NAME1=account-api
 
 SRC_NAME2=src/services/signup-api/main/main.go
 BINARY_NAME2=signup-api
