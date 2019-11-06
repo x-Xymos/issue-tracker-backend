@@ -2,10 +2,10 @@ package logincont
 
 import (
 	"encoding/json"
+	AccountModel "issue-tracker-backend/src/models/account"
+	Service "issue-tracker-backend/src/servicetemplates"
+	u "issue-tracker-backend/src/utils"
 	"net/http"
-	AccountModel "todo-backend/src/models/account"
-	Service "todo-backend/src/servicetemplates"
-	u "todo-backend/src/utils"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )

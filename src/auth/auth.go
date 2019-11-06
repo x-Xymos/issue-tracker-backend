@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
+	"issue-tracker-backend/env"
+	AccountModel "issue-tracker-backend/src/models/account"
+	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"strings"
-	"todo-backend/env"
-	AccountModel "todo-backend/src/models/account"
-	u "todo-backend/src/utils"
 
 	jwt "github.com/dgrijalva/jwt-go"
 )

@@ -2,11 +2,11 @@ package servicetemplates
 
 import (
 	"fmt"
+	"issue-tracker-backend/src/auth"
+	"issue-tracker-backend/src/servicetemplates/db"
 	"log"
 	"net/http"
 	"os"
-	"todo-backend/src/auth"
-	"todo-backend/src/servicetemplates/db"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -40,19 +40,5 @@ func Start(routes *[]RouteBinding, port *string, serviceName *string) {
 	}
 	fmt.Printf("Started %s on 0.0.0.0:%s\n", *serviceName, *port)
 
-	//handler := cors.Default().Handler(router)
-
-	// c := cors.New(cors.Options{
-	// 	AllowedOrigins:   []string{"*"},
-	// 	AllowCredentials: true,
-	// 	//AllowedHeaders:   []string{"Authorization", "Access-Control-Allow-Credentials", "Access-Control-Allow-Headers", "Access-Control-Allow-Methods", "Access-Control-Allow-Origin", "Content-Length", "Content-Type", "transformRequest", "transformResponse", "xsrfCookieName", "xsrfHeaderName"},
-	// 	// Enable Debugging for testing, consider disabling in production
-	// 	Debug: true,
-	// })
-
-	// Insert the middleware
-	//handler = c.Handler(handler)
-
-	//log.Fatal(http.ListenAndServe(":"+*port, handler))
 	log.Fatal(http.ListenAndServe(":"+*port, handlers.CORS(handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}), handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), handlers.AllowedOrigins([]string{"*"}))(router)))
 }

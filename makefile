@@ -3,8 +3,8 @@ BUILD_DIR=build/
 SRC_NAME1=src/services/account-api/main/main.go
 BINARY_NAME1=account-api
 
-SRC_NAME2=src/services/signup-api/main/main.go
-BINARY_NAME2=signup-api
+SRC_NAME2=src/services/issue-api/main/main.go
+BINARY_NAME2=issue-api
 
 build:
 	go build -o  $(BUILD_DIR)$(BINARY_NAME1) -v $(SRC_NAME1)

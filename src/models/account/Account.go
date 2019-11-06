@@ -3,9 +3,9 @@ package account
 import (
 	"context"
 	"fmt"
+	"issue-tracker-backend/env"
+	u "issue-tracker-backend/src/utils"
 	"strings"
-	"todo-backend/env"
-	u "todo-backend/src/utils"
 
 	"github.com/dgrijalva/jwt-go"
 	"go.mongodb.org/mongo-driver/bson"
