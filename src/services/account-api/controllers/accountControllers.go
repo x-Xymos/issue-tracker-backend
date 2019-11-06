@@ -20,7 +20,7 @@ func getProfile(w http.ResponseWriter, r *http.Request) {
 		resp := account.GetProfile(Service.DBConn)
 		u.Respond(w, resp)
 	} else {
-		u.Respond(w, map[string]interface{}{"status": false, "message": "Error retrieving userID"})
+		u.Respond(w, u.Message(false, "Error retrieving userID"))
 	}
 }
 
@@ -38,7 +38,7 @@ func updateProfile(w http.ResponseWriter, r *http.Request) {
 		resp := account.UpdateProfile(Service.DBConn)
 		u.Respond(w, resp)
 	} else {
-		u.Respond(w, map[string]interface{}{"status": false, "message": "Error retrieving userID"})
+		u.Respond(w, u.Message(false, "Error retrieving userID"))
 	}
 }
 

@@ -28,23 +28,13 @@ type Token struct {
 	jwt.StandardClaims
 }
 
-func emailValidator(email *string, DBConn *mongo.Client) bool {
-	return true
-}
+func (account *Account) _emailValidator(DBConn *mongo.Client) map[string]interface{} {
 
-//Validate incoming user details when they register for a new account
-func (account *Account) Validate(DBConn *mongo.Client) (map[string]interface{}, bool) {
-
-	if !strings.Contains(account.Email, "@") {
-		return u.Message(false, "Invalid email address"), false
-	}
-
-	if len(account.Password) < 6 {
-		return u.Message(false, "Password has to be at least 6 characters long"), false
+	if !strings.Contains(account.Email, "@") || len(account.Email) < 5 {
+		return u.Message(false, "Invalid email address")
 	}
 
 	tempAcc := &Account{}
-
 	collection := DBConn.Database("todo").Collection("accounts")
 
 	//Email must be unique
@@ -52,35 +42,68 @@ func (account *Account) Validate(DBConn *mongo.Client) (map[string]interface{}, 
 
 	err := collection.FindOne(context.TODO(), emailFilter).Decode(&tempAcc)
 	if err != nil && err != mongo.ErrNoDocuments {
-		return u.Message(false, "Connection error, please try again"), false
+		return u.Message(false, "Connection error, please try again")
 	}
 
 	if tempAcc.Email != "" {
-		return u.Message(false, "Email address already in use by another user."), false
+		return u.Message(false, "Email address already in use by another user.")
+	}
+	return u.Message(true, "")
+}
+
+func (account *Account) _usernameValidator(DBConn *mongo.Client) map[string]interface{} {
+
+	if len(account.Username) < 3 {
+		return u.Message(false, "Username has to be at least 3 characters long")
 	}
 
+	tempAcc := &Account{}
+	collection := DBConn.Database("todo").Collection("accounts")
 	//Username must be unique
 	usernameFilter := bson.D{{"username", account.Username}}
 
-	err = collection.FindOne(context.TODO(), usernameFilter).Decode(&tempAcc)
+	err := collection.FindOne(context.TODO(), usernameFilter).Decode(&tempAcc)
 
 	if err != mongo.ErrNoDocuments && err != nil {
-		return u.Message(false, "Connection error, please try again"), false
+		return u.Message(false, "Connection error, please try again")
 	}
 
 	if tempAcc.Username != "" {
-		return u.Message(false, "Username already in use by another user."), false
+		return u.Message(false, "Username already in use by another user.")
+	}
+	return u.Message(true, "")
+}
+
+func (account *Account) _passwordValidator() map[string]interface{} {
+
+	if len(account.Password) < 6 {
+		return u.Message(false, "Password has to be at least 6 characters long")
+	}
+	return u.Message(true, "")
+
+}
+
+//ValidateAccountCreation : validate incoming user details in the account.Create method
+func (account *Account) ValidateAccountCreation(DBConn *mongo.Client) map[string]interface{} {
+
+	if resp := account._emailValidator(DBConn); resp["status"] == false {
+		return resp
 	}
 
-	return u.Message(false, "Requirement passed"), true
+	if resp := account._usernameValidator(DBConn); resp["status"] == false {
+		return resp
+	}
+
+	return account._passwordValidator()
 }
 
 //Create : account creation
 func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 
-	if resp, ok := account.Validate(DBConn); !ok {
+	if resp := account.ValidateAccountCreation(DBConn); resp["status"] == false {
 		return resp
 	}
+
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
@@ -158,21 +181,38 @@ func (account *Account) GetProfile(DBConn *mongo.Client) map[string]interface{} 
 	return resp
 }
 
+//ValidateProfileUpdate : validate incoming user details in the account.UpdateProfile method
+func (account *Account) ValidateProfileUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
+
+	if account.Email != "" {
+		if resp := account._emailValidator(DBConn); resp["status"] == false {
+			return resp
+		}
+		updatedAccount["email"] = account.Email
+	}
+
+	if account.Username != "" {
+		if resp := account._usernameValidator(DBConn); resp["status"] == false {
+			return resp
+		}
+		updatedAccount["username"] = account.Username
+	}
+
+	for _, v := range updatedAccount {
+		if v != "" {
+			return u.Message(true, "")
+		}
+	}
+	return u.Message(false, "No fields specified for the update or fields were identical")
+}
+
 //UpdateProfile : Retrieve user information
 func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface{} {
 
-	if resp, ok := account.Validate(DBConn); !ok {
+	updatedAccount := map[string]string{}
+
+	if resp := account.ValidateProfileUpdate(updatedAccount, DBConn); resp["status"] == false {
 		return resp
-	}
-
-	updatedAccount := map[string]string{
-		"username": account.Username,
-		"email":    account.Email,
-	}
-
-	if account.Password != "" {
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
-		updatedAccount["password"] = string(hashedPassword)
 	}
 
 	collection := DBConn.Database("todo").Collection("accounts")
@@ -181,10 +221,8 @@ func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface
 	update := bson.D{
 		{"$set", updatedAccount},
 	}
-	updateResult, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
-
-	fmt.Println(updateResult)
-
+	_, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
+	fmt.Println(err)
 	resp := map[string]interface{}{}
 
 	if err != nil {
