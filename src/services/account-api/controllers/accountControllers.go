@@ -10,36 +10,53 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func getProfile(w http.ResponseWriter, r *http.Request) {
+func profile(w http.ResponseWriter, r *http.Request) {
 
-	userID := r.Context().Value("userID")
+	switch r.Method {
+	case http.MethodGet:
+		paramHeader := r.Header.Get("params")
+		if paramHeader == "" {
+			response := u.Message(false, "Missing query parameters")
+			w.WriteHeader(http.StatusBadRequest)
+			u.Respond(w, response)
+			return
+		}
+		account := &AccountModel.Account{}
 
-	if userID != nil {
-		objID, _ := primitive.ObjectIDFromHex(userID.(string))
-		account := &AccountModel.Account{UserID: objID}
-		resp := account.GetProfile(Service.DBConn)
-		u.Respond(w, resp)
-	} else {
-		u.Respond(w, u.Message(false, "Error retrieving userID"))
-	}
-}
-
-func updateProfile(w http.ResponseWriter, r *http.Request) {
-
-	userID := r.Context().Value("userID")
-	if userID != nil {
-		objID, _ := primitive.ObjectIDFromHex(userID.(string))
-		account := &AccountModel.Account{UserID: objID}
-		err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
+		err := json.Unmarshal([]byte(paramHeader), account)
 		if err != nil {
 			u.Respond(w, u.Message(false, "Invalid request"))
 			return
 		}
-		resp := account.UpdateProfile(Service.DBConn)
+		userID := r.Context().Value("userID")
+
+		if userID != nil {
+			userID = userID.(string)
+		} else {
+			userID = ""
+		}
+		resp := account.GetProfile(userID.(string), Service.DBConn)
 		u.Respond(w, resp)
-	} else {
-		u.Respond(w, u.Message(false, "Error retrieving userID"))
+
+	case http.MethodPost:
+		userID := r.Context().Value("userID")
+		if userID != nil {
+			objID, _ := primitive.ObjectIDFromHex(userID.(string))
+			account := &AccountModel.Account{UserID: objID}
+			err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
+			if err != nil {
+				u.Respond(w, u.Message(false, "Invalid request"))
+				return
+			}
+			resp := account.UpdateProfile(Service.DBConn)
+			u.Respond(w, resp)
+		} else {
+			u.Respond(w, u.Message(false, "Error retrieving userID"))
+		}
+	default:
+		u.Respond(w, u.Message(false, "Error: Method unsupported"))
 	}
+
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
@@ -71,19 +88,11 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func home(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	userID := r.Context().Value("userID").(string)
-	u.Respond(w, map[string]interface{}{"status": true, "message": "This is the Account-Api", "UserID": userID})
-}
-
 //Routes : an array of route bindings
 var Routes = []Service.RouteBinding{
-	Service.RouteBinding{"/api/account", home, []string{"GET"}},
 	Service.RouteBinding{"/api/account/login", login, []string{"POST"}},
 	Service.RouteBinding{"/api/account/signup", signup, []string{"POST"}},
-	Service.RouteBinding{"/api/account/profile", getProfile, []string{"GET"}},
-	Service.RouteBinding{"/api/account/profile/update", updateProfile, []string{"POST"}},
+	Service.RouteBinding{"/api/account/profile", profile, []string{"GET", "POST"}},
 }
 
 //ServiceName : service name

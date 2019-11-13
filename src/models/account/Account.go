@@ -16,10 +16,11 @@ import (
 
 //Account : user account struct
 type Account struct {
-	UserID   primitive.ObjectID `bson:"_id, omitempty"`
-	Username string             `json:"username"`
-	Email    string             `json:"email"`
-	Password string             `json:"password"`
+	UserID    primitive.ObjectID `bson:"_id, omitempty"`
+	Username  string             `json:"username"`
+	Email     string             `json:"email"`
+	Password  string             `json:"password"`
+	CreatedAt string             `json:"createdAt"`
 }
 
 //Token : JWT token struct
@@ -35,7 +36,7 @@ func (account *Account) _emailValidator(DBConn *mongo.Client) map[string]interfa
 	}
 
 	tempAcc := &Account{}
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
 	//Email must be unique
 	emailFilter := bson.D{{"email", account.Email}}
@@ -58,7 +59,7 @@ func (account *Account) _usernameValidator(DBConn *mongo.Client) map[string]inte
 	}
 
 	tempAcc := &Account{}
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 	//Username must be unique
 	usernameFilter := bson.D{{"username", account.Username}}
 
@@ -83,8 +84,7 @@ func (account *Account) _passwordValidator() map[string]interface{} {
 
 }
 
-//ValidateAccountCreation : validate incoming user details in the account.Create method
-func (account *Account) ValidateAccountCreation(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) validateAccountCreation(DBConn *mongo.Client) map[string]interface{} {
 
 	if resp := account._emailValidator(DBConn); resp["status"] == false {
 		return resp
@@ -100,7 +100,7 @@ func (account *Account) ValidateAccountCreation(DBConn *mongo.Client) map[string
 //Create : account creation
 func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 
-	if resp := account.ValidateAccountCreation(DBConn); resp["status"] == false {
+	if resp := account.validateAccountCreation(DBConn); resp["status"] == false {
 		return resp
 	}
 
@@ -108,7 +108,7 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
 
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
@@ -127,7 +127,7 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 
 	storedAccount := &Account{}
 
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
 	emailFilter := bson.D{{"email", account.Email}}
 
@@ -145,6 +145,7 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 	}
 	//Worked! Logged In
 	account.Password = ""
+	storedAccount.Password = ""
 
 	//Create JWT token
 	tk := &Token{UserID: storedAccount.UserID.Hex()}
@@ -152,24 +153,33 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
 
 	resp := u.Message(true, "Logged In")
-	resp["account"] = account
+	storedAccount.CreatedAt = storedAccount.UserID.Timestamp().String()
+	resp["account"] = storedAccount
 	resp["token"] = tokenString
 	return resp
 }
 
 //GetProfile : Retrieve user information
-func (account *Account) GetProfile(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) GetProfile(currentUserID string, DBConn *mongo.Client) map[string]interface{} {
 
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
-	userIDFilter := bson.D{{"_id", account.UserID}}
+	currID, _ := primitive.ObjectIDFromHex(currentUserID)
 
-	err := collection.FindOne(context.TODO(), userIDFilter).Decode(account)
+	userFilter := bson.D{{}}
+	if account.Username != "" {
+		userFilter = bson.D{{"username", account.Username}}
+	} else {
+		userFilter = bson.D{{"_id", currID}}
+	}
+
+	err := collection.FindOne(context.TODO(), userFilter).Decode(account)
 
 	account.Password = ""
 	resp := map[string]interface{}{"account": account}
 
 	if err != nil {
+		resp["message"] = "User not found"
 		resp["status"] = false
 		if err == mongo.ErrNoDocuments {
 			return resp
@@ -177,12 +187,19 @@ func (account *Account) GetProfile(DBConn *mongo.Client) map[string]interface{} 
 		return resp
 	}
 
+	if account.UserID == currID {
+		resp["accountOwner"] = true
+		account.CreatedAt = account.UserID.Timestamp().String()
+	} else {
+		resp["accountOwner"] = false
+		account.Email = ""
+	}
+
 	resp["status"] = true
 	return resp
 }
 
-//ValidateProfileUpdate : validate incoming user details in the account.UpdateProfile method
-func (account *Account) ValidateProfileUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) validateProfileUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
 
 	if account.Email != "" {
 		if resp := account._emailValidator(DBConn); resp["status"] == false {
@@ -211,11 +228,11 @@ func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface
 
 	updatedAccount := map[string]string{}
 
-	if resp := account.ValidateProfileUpdate(updatedAccount, DBConn); resp["status"] == false {
+	if resp := account.validateProfileUpdate(updatedAccount, DBConn); resp["status"] == false {
 		return resp
 	}
 
-	collection := DBConn.Database("todo").Collection("accounts")
+	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
 	userIDFilter := bson.D{{"_id", account.UserID}}
 	update := bson.D{
