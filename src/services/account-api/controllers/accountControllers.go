@@ -35,7 +35,7 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userID = ""
 		}
-		resp := account.GetProfile(userID.(string), Service.DBConn)
+		resp := account.Get(userID.(string), Service.DBConn)
 		u.Respond(w, resp)
 
 	case http.MethodPost:
@@ -48,7 +48,7 @@ func profile(w http.ResponseWriter, r *http.Request) {
 				u.Respond(w, u.Message(false, "Invalid request"))
 				return
 			}
-			resp := account.UpdateProfile(Service.DBConn)
+			resp := account.Update(Service.DBConn)
 			u.Respond(w, resp)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"))

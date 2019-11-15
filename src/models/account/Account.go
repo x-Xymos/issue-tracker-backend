@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"fmt"
 	"issue-tracker-backend/env"
 	u "issue-tracker-backend/src/utils"
 	"strings"
@@ -112,14 +111,14 @@ func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
-		return u.Message(false, "Failed to create account, connection error.")
+		return u.Message(false, "Failed to create account: "+err.Error())
 	}
 
 	account.Password = "" //delete password
 
-	response := u.Message(true, "Account has been created")
-	response["account"] = account
-	return response
+	resp := u.Message(true, "Account has been created")
+	resp["account"] = account
+	return resp
 }
 
 //Login : login
@@ -134,9 +133,9 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 	err := collection.FindOne(context.TODO(), emailFilter).Decode(&storedAccount)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Email address doesn't match any accounts in our records, please try again")
+			return u.Message(false, "Failed to log in: Email address doesn't match any accounts in our records, please try again")
 		}
-		return u.Message(false, "Connection error, please try again")
+		return u.Message(false, "Failed to log in: "+err.Error())
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(storedAccount.Password), []byte(account.Password))
@@ -152,19 +151,20 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
 
-	resp := u.Message(true, "Logged In")
 	storedAccount.CreatedAt = storedAccount.UserID.Timestamp().String()
+
+	resp := u.Message(true, "Logged In")
 	resp["account"] = storedAccount
 	resp["token"] = tokenString
 	return resp
 }
 
-//GetProfile : Retrieve user information
-func (account *Account) GetProfile(currentUserID string, DBConn *mongo.Client) map[string]interface{} {
+//Get : Retrieve account information
+func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) map[string]interface{} {
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
-	currID, _ := primitive.ObjectIDFromHex(currentUserID)
+	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
 	userFilter := bson.D{{}}
 	if account.Username != "" {
@@ -174,18 +174,16 @@ func (account *Account) GetProfile(currentUserID string, DBConn *mongo.Client) m
 	}
 
 	err := collection.FindOne(context.TODO(), userFilter).Decode(account)
-
 	account.Password = ""
-	resp := map[string]interface{}{"account": account}
 
 	if err != nil {
-		resp["message"] = "User not found"
-		resp["status"] = false
 		if err == mongo.ErrNoDocuments {
-			return resp
+			return u.Message(false, "Failed to retrieve account: user not found")
 		}
-		return resp
+		return u.Message(false, "Failed to retrieve account: "+err.Error())
 	}
+
+	resp := u.Message(true, "")
 
 	if account.UserID == currID {
 		resp["accountOwner"] = true
@@ -194,12 +192,11 @@ func (account *Account) GetProfile(currentUserID string, DBConn *mongo.Client) m
 		resp["accountOwner"] = false
 		account.Email = ""
 	}
-
-	resp["status"] = true
+	resp["account"] = account
 	return resp
 }
 
-func (account *Account) validateProfileUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
 
 	if account.Email != "" {
 		if resp := account._emailValidator(DBConn); resp["status"] == false {
@@ -223,12 +220,12 @@ func (account *Account) validateProfileUpdate(updatedAccount map[string]string, 
 	return u.Message(false, "No fields specified for the update or fields were identical")
 }
 
-//UpdateProfile : Retrieve user information
-func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface{} {
+//Update : Update account information
+func (account *Account) Update(DBConn *mongo.Client) map[string]interface{} {
 
 	updatedAccount := map[string]string{}
 
-	if resp := account.validateProfileUpdate(updatedAccount, DBConn); resp["status"] == false {
+	if resp := account.validateUpdate(updatedAccount, DBConn); resp["status"] == false {
 		return resp
 	}
 
@@ -239,17 +236,12 @@ func (account *Account) UpdateProfile(DBConn *mongo.Client) map[string]interface
 		{"$set", updatedAccount},
 	}
 	_, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
-	fmt.Println(err)
-	resp := map[string]interface{}{}
 
 	if err != nil {
-		resp["status"] = false
 		if err == mongo.ErrNoDocuments {
-			return resp
+			return u.Message(false, "Failed to update account: account not found")
 		}
-		return resp
+		return u.Message(false, "Failed to update account: "+err.Error())
 	}
-
-	resp["status"] = true
-	return resp
+	return u.Message(true, "")
 }
