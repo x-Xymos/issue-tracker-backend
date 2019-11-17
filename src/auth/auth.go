@@ -16,7 +16,7 @@ import (
 var JwtAuthentication = func(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//"/api/",
+
 		notAuth := []string{"/api/account/login", "/api/account/signup"} //List of endpoints that doesn't require auth
 		optionalAuth := []string{"/api/account/profile"}
 
@@ -38,7 +38,6 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 			}
 		}
 
-		response := make(map[string]interface{})
 		tokenHeader := r.Header.Get("Authorization") //Grab the token from the header
 		if tokenHeader == "" {                       //Token is missing, returns with error code 403 Unauthorized
 			if isOptionalAuth {
@@ -46,10 +45,7 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			response = u.Message(false, "Missing auth token")
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Add("Content-Type", "application/json")
-			u.Respond(w, response)
+			u.Respond(w, u.Message(false, "Missing auth token"), http.StatusUnauthorized)
 			return
 		}
 
@@ -60,10 +56,7 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			response = u.Message(false, "Invalid/Malformed auth token")
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Add("Content-Type", "application/json")
-			u.Respond(w, response)
+			u.Respond(w, u.Message(false, "Invalid/Malformed auth token"), http.StatusUnauthorized)
 			return
 		}
 
@@ -80,10 +73,7 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			response = u.Message(false, "Malformed authentication token")
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Add("Content-Type", "application/json")
-			u.Respond(w, response)
+			u.Respond(w, u.Message(false, "Malformed authentication token"), http.StatusUnauthorized)
 			return
 		}
 
@@ -93,10 +83,7 @@ var JwtAuthentication = func(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			response = u.Message(false, "Token is not valid.")
-			w.WriteHeader(http.StatusForbidden)
-			w.Header().Add("Content-Type", "application/json")
-			u.Respond(w, response)
+			u.Respond(w, u.Message(false, "Token is not valid."), http.StatusUnauthorized)
 			return
 		}
 

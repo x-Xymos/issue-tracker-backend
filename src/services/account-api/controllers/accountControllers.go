@@ -1,4 +1,4 @@
-package logincont
+package logincontroller
 
 import (
 	"encoding/json"
@@ -16,16 +16,14 @@ func profile(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		paramHeader := r.Header.Get("params")
 		if paramHeader == "" {
-			response := u.Message(false, "Missing query parameters")
-			w.WriteHeader(http.StatusBadRequest)
-			u.Respond(w, response)
+			u.Respond(w, u.Message(false, "Invalid request: Missing query parameters"), http.StatusBadRequest)
 			return
 		}
 		account := &AccountModel.Account{}
 
 		err := json.Unmarshal([]byte(paramHeader), account)
 		if err != nil {
-			u.Respond(w, u.Message(false, "Invalid request"))
+			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
 		userID := r.Context().Value("userID")
@@ -35,26 +33,26 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userID = ""
 		}
-		resp := account.Get(userID.(string), Service.DBConn)
-		u.Respond(w, resp)
+		resp, statusCode := account.Get(userID.(string), Service.DBConn)
+		u.Respond(w, resp, statusCode)
 
-	case http.MethodPost:
+	case http.MethodPut:
 		userID := r.Context().Value("userID")
 		if userID != nil {
 			objID, _ := primitive.ObjectIDFromHex(userID.(string))
 			account := &AccountModel.Account{UserID: objID}
 			err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 			if err != nil {
-				u.Respond(w, u.Message(false, "Invalid request"))
+				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp := account.Update(Service.DBConn)
-			u.Respond(w, resp)
+			resp, statusCode := account.Update(Service.DBConn)
+			u.Respond(w, resp, statusCode)
 		} else {
-			u.Respond(w, u.Message(false, "Error retrieving userID"))
+			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusNotFound)
 		}
 	default:
-		u.Respond(w, u.Message(false, "Error: Method unsupported"))
+		u.Respond(w, u.Message(false, "Invalid request: Method unsupported"), http.StatusMethodNotAllowed)
 	}
 
 }
@@ -64,11 +62,11 @@ func signup(w http.ResponseWriter, r *http.Request) {
 	account := &AccountModel.Account{}
 	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 	if err != nil {
-		u.Respond(w, u.Message(false, "Invalid request"))
+		u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 		return
 	}
-	resp := account.Create(Service.DBConn) //Create account
-	u.Respond(w, resp)
+	resp, statusCode := account.Create(Service.DBConn) //Create account
+	u.Respond(w, resp, statusCode)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
@@ -77,14 +75,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 	if err != nil {
-		u.Respond(w, u.Message(false, "Invalid request"))
+		u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 		return
 	}
 
 	//resp := account.Login(&account.Email, &account.Password, Service.DBConn)
 	resp := account.Login(Service.DBConn)
 
-	u.Respond(w, resp)
+	u.Respond(w, resp, http.StatusOK)
 
 }
 
@@ -92,7 +90,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 var Routes = []Service.RouteBinding{
 	Service.RouteBinding{"/api/account/login", login, []string{"POST"}},
 	Service.RouteBinding{"/api/account/signup", signup, []string{"POST"}},
-	Service.RouteBinding{"/api/account/profile", profile, []string{"GET", "POST"}},
+	Service.RouteBinding{"/api/account/profile", profile, []string{"GET", "PUT"}},
 }
 
 //ServiceName : service name

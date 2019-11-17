@@ -1,13 +1,11 @@
 package issue
 
 import (
-	"context"
 	u "issue-tracker-backend/src/utils"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //Issue : Issue struct
@@ -29,41 +27,41 @@ func (issue *Issue) _titleValidator(DBConn *mongo.Client) map[string]interface{}
 	return u.Message(true, "")
 }
 
-//ValidateIssueCreation :
-func (issue *Issue) ValidateIssueCreation(DBConn *mongo.Client) map[string]interface{} {
+// //ValidateIssueCreation :
+// func (issue *Issue) ValidateIssueCreation(DBConn *mongo.Client) map[string]interface{} {
 
-	if resp := account._emailValidator(DBConn); resp["status"] == false {
-		return resp
-	}
+// 	if resp := account._emailValidator(DBConn); resp["status"] == false {
+// 		return resp
+// 	}
 
-	if resp := account._usernameValidator(DBConn); resp["status"] == false {
-		return resp
-	}
+// 	if resp := account._usernameValidator(DBConn); resp["status"] == false {
+// 		return resp
+// 	}
 
-	return account._passwordValidator()
-}
+// 	return account._passwordValidator()
+// }
 
-//Create : Issue creation
-func (issue *Issue) Create(DBConn *mongo.Client) map[string]interface{} {
+// //Create : Issue creation
+// func (issue *Issue) Create(DBConn *mongo.Client) map[string]interface{} {
 
-	if resp := account.ValidateAccountCreation(DBConn); resp["status"] == false {
-		return resp
-	}
+// 	if resp := account.ValidateAccountCreation(DBConn); resp["status"] == false {
+// 		return resp
+// 	}
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
-	account.Password = string(hashedPassword)
-	account.UserID = primitive.NewObjectID()
+// 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
+// 	account.Password = string(hashedPassword)
+// 	account.UserID = primitive.NewObjectID()
 
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+// 	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
-	_, err := collection.InsertOne(context.TODO(), account)
-	if err != nil {
-		return u.Message(false, "Failed to create account, connection error.")
-	}
+// 	_, err := collection.InsertOne(context.TODO(), account)
+// 	if err != nil {
+// 		return u.Message(false, "Failed to create account, connection error.")
+// 	}
 
-	account.Password = "" //delete password
+// 	account.Password = "" //delete password
 
-	response := u.Message(true, "Account has been created")
-	response["account"] = account
-	return response
-}
+// 	response := u.Message(true, "Account has been created")
+// 	response["account"] = account
+// 	return response
+// }

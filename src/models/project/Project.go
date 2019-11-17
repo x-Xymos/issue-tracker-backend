@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	u "issue-tracker-backend/src/utils"
+	"net/http"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,13 +16,13 @@ type Project struct {
 	ID        primitive.ObjectID `bson:"_id, omitempty"`
 	OwnerID   primitive.ObjectID `bson:"ownerID, omitempty"`
 	Title     string             `json:"title"`
-	CreatedAt string             `json:"createdAt"`
+	createdAt string             `json:"createdAt"`
 }
 
-func (project *Project) _titleValidator(DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) _titleValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	if len(project.Title) < 1 || len(project.Title) > 64 {
-		return u.Message(false, "Title has to be between 1-64 characters long")
+		return u.Message(false, "Title has to be between 1-64 characters long"), http.StatusBadRequest
 	}
 
 	tempProj := &Project{}
@@ -30,78 +31,86 @@ func (project *Project) _titleValidator(DBConn *mongo.Client) map[string]interfa
 	//Project Title must be unique
 	projFilter := bson.D{{"title", project.Title}}
 
-	err := collection.FindOne(context.TODO(), projFilter).Decode(&tempProj)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	err := collection.FindOne(context.TODO(), projFilter, findOptions).Decode(&tempProj)
+
 	if err != nil && err != mongo.ErrNoDocuments {
-		return u.Message(false, "Connection error, please try again")
+		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
 	}
 
 	if tempProj.Title != "" {
-		return u.Message(false, "Title has to be unique.")
+		return u.Message(false, "Title has to be unique."), http.StatusBadRequest
 	}
 
-	return u.Message(true, "")
+	return u.Message(true, ""), 0
 }
 
 //Create :
-func (project *Project) Create(authenticatedUserID string, DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) Create(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if resp := project._titleValidator(DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := project._titleValidator(DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
 	collection := DBConn.Database("issue-tracker").Collection("projects")
 	project.ID = primitive.NewObjectID()
-	project.OwnerID, _ = primitive.ObjectIDFromHex(authenticatedUserID)
 
 	_, err := collection.InsertOne(context.TODO(), project)
 	if err != nil {
-		return u.Message(false, "Failed to create project: "+err.Error())
+		return u.Message(false, "Failed to create project: "+err.Error()), http.StatusInternalServerError
 	}
 
-	project.CreatedAt = project.ID.Timestamp().String()
+	project.createdAt = project.ID.Timestamp().String()
 
 	response := u.Message(true, "")
 	response["project"] = project
-	return response
+	return response, http.StatusOK
 }
 
 //Get :
-func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	collection := DBConn.Database("issue-tracker").Collection("projects")
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
-	projectFilter := bson.D{{"_id", project.ID}}
+	var projFilter bson.D
+	if project.Title != "" {
+		projFilter = bson.D{{"title", project.Title}}
+	} else {
+		return u.Message(false, "Missing project title"), http.StatusBadRequest
+	}
 
-	err := collection.FindOne(context.TODO(), projectFilter).Decode(project)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+
+	err := collection.FindOne(context.TODO(), projFilter, findOptions).Decode(project)
 
 	resp := map[string]interface{}{"project": project}
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to retrieve project: Project not found")
+			return u.Message(false, "Failed to retrieve project: Project not found"), http.StatusNotFound
 		}
-		return u.Message(false, "Failed to retrieve project: "+err.Error())
+		return u.Message(false, "Failed to retrieve project: "+err.Error()), http.StatusInternalServerError
 	}
 
 	if project.OwnerID == currID {
 		resp["projectOwner"] = true
-		project.CreatedAt = project.ID.Timestamp().String()
+		project.createdAt = project.ID.Timestamp().String()
 	} else {
 		resp["projectOwner"] = false
 	}
 
 	resp["status"] = true
-	return resp
+	return resp, http.StatusOK
 }
 
 //GetAll :
-func (project *Project) GetAll(lastID string, DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) GetAll(lastID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	collection := DBConn.Database("issue-tracker").Collection("projects")
 
-	projectFilter := bson.D{{}}
+	var projectFilter bson.D
 
 	if lastID != "" {
 		_lastID, _ := primitive.ObjectIDFromHex(lastID)
@@ -118,7 +127,7 @@ func (project *Project) GetAll(lastID string, DBConn *mongo.Client) map[string]i
 
 	cur, err := collection.Find(context.TODO(), projectFilter, findOptions)
 	if err != nil {
-		return u.Message(false, "Failed to retrieve projects: "+err.Error())
+		return u.Message(false, "Failed to retrieve projects: "+err.Error()), http.StatusInternalServerError
 	}
 
 	for cur.Next(context.TODO()) {
@@ -126,42 +135,42 @@ func (project *Project) GetAll(lastID string, DBConn *mongo.Client) map[string]i
 		var elem Project
 		err := cur.Decode(&elem)
 		if err != nil {
-			return u.Message(false, "Failed to decode projects: "+err.Error())
+			return u.Message(false, "Failed to decode projects: "+err.Error()), http.StatusInternalServerError
 		}
 		results = append(results, &elem)
 	}
 
 	if err := cur.Err(); err != nil {
-		return u.Message(false, "Cursor error: "+err.Error())
+		return u.Message(false, "Cursor error: "+err.Error()), http.StatusInternalServerError
 	}
 	// Close the cursor once finished
 	cur.Close(context.TODO())
 
 	resp := u.Message(true, "Success")
 	resp["results"] = results
-	return resp
+	return resp, http.StatusOK
 	///https://arpitbhayani.me/blogs/fast-and-efficient-pagination-in-mongodb
 }
 
-func (project *Project) validateUpdate(updatedProject map[string]string, DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) validateUpdate(updatedProject map[string]string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	if project.Title != "" {
-		if resp := project._titleValidator(DBConn); resp["status"] == false {
-			return resp
+		if resp, statusCode := project._titleValidator(DBConn); resp["status"] == false {
+			return resp, statusCode
 		}
 		updatedProject["title"] = project.Title
 	}
 
-	return u.Message(false, "No fields specified for the update or fields were identical")
+	return u.Message(false, "No fields specified for the update or fields were identical"), http.StatusBadRequest
 }
 
 //Update :
-func (project *Project) Update(DBConn *mongo.Client) map[string]interface{} {
+func (project *Project) Update(DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	updatedProject := map[string]string{}
 
-	if resp := project.validateUpdate(updatedProject, DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := project.validateUpdate(updatedProject, DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
@@ -174,10 +183,10 @@ func (project *Project) Update(DBConn *mongo.Client) map[string]interface{} {
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to update project: project not found")
+			return u.Message(false, "Failed to update project: project not found"), http.StatusNotFound
 		}
-		return u.Message(false, "Failed to update project: "+err.Error())
+		return u.Message(false, "Failed to update project: "+err.Error()), http.StatusInternalServerError
 	}
 
-	return u.Message(true, "")
+	return u.Message(true, ""), http.StatusOK
 }

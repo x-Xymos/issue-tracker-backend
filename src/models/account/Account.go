@@ -4,6 +4,7 @@ import (
 	"context"
 	"issue-tracker-backend/env"
 	u "issue-tracker-backend/src/utils"
+	"net/http"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
@@ -28,10 +29,10 @@ type Token struct {
 	jwt.StandardClaims
 }
 
-func (account *Account) _emailValidator(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	if !strings.Contains(account.Email, "@") || len(account.Email) < 5 {
-		return u.Message(false, "Invalid email address")
+		return u.Message(false, "Invalid email address"), http.StatusBadRequest
 	}
 
 	tempAcc := &Account{}
@@ -42,19 +43,19 @@ func (account *Account) _emailValidator(DBConn *mongo.Client) map[string]interfa
 
 	err := collection.FindOne(context.TODO(), emailFilter).Decode(&tempAcc)
 	if err != nil && err != mongo.ErrNoDocuments {
-		return u.Message(false, "Connection error, please try again")
+		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
 	}
 
 	if tempAcc.Email != "" {
-		return u.Message(false, "Email address already in use by another user.")
+		return u.Message(false, "Email address already in use by another user."), http.StatusBadRequest
 	}
-	return u.Message(true, "")
+	return u.Message(true, ""), 0
 }
 
-func (account *Account) _usernameValidator(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	if len(account.Username) < 3 {
-		return u.Message(false, "Username has to be at least 3 characters long")
+		return u.Message(false, "Username has to be at least 3 characters long"), http.StatusBadRequest
 	}
 
 	tempAcc := &Account{}
@@ -65,60 +66,60 @@ func (account *Account) _usernameValidator(DBConn *mongo.Client) map[string]inte
 	err := collection.FindOne(context.TODO(), usernameFilter).Decode(&tempAcc)
 
 	if err != mongo.ErrNoDocuments && err != nil {
-		return u.Message(false, "Connection error, please try again")
+		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
 	}
 
 	if tempAcc.Username != "" {
-		return u.Message(false, "Username already in use by another user.")
+		return u.Message(false, "Username already in use by another user."), http.StatusBadRequest
 	}
-	return u.Message(true, "")
+	return u.Message(true, ""), 0
 }
 
-func (account *Account) _passwordValidator() map[string]interface{} {
+func (account *Account) _passwordValidator() (map[string]interface{}, int) {
 
 	if len(account.Password) < 6 {
-		return u.Message(false, "Password has to be at least 6 characters long")
+		return u.Message(false, "Password has to be at least 6 characters long"), http.StatusBadRequest
 	}
-	return u.Message(true, "")
+	return u.Message(true, ""), 0
 
 }
 
-func (account *Account) validateAccountCreation(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) validateAccountCreation(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if resp := account._emailValidator(DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := account._emailValidator(DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
-	if resp := account._usernameValidator(DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := account._usernameValidator(DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
 	return account._passwordValidator()
 }
 
 //Create : account creation
-func (account *Account) Create(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) Create(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if resp := account.validateAccountCreation(DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := account.validateAccountCreation(DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
-
+	account.Email = strings.ToLower(account.Email)
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
-		return u.Message(false, "Failed to create account: "+err.Error())
+		return u.Message(false, "Failed to create account: "+err.Error()), http.StatusInternalServerError
 	}
 
 	account.Password = "" //delete password
 
 	resp := u.Message(true, "Account has been created")
 	resp["account"] = account
-	return resp
+	return resp, http.StatusCreated
 }
 
 //Login : login
@@ -128,6 +129,7 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
+	account.Email = strings.ToLower(account.Email)
 	emailFilter := bson.D{{"email", account.Email}}
 
 	err := collection.FindOne(context.TODO(), emailFilter).Decode(&storedAccount)
@@ -160,7 +162,7 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 }
 
 //Get : Retrieve account information
-func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
 
@@ -178,9 +180,9 @@ func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) ma
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to retrieve account: user not found")
+			return u.Message(false, "Failed to retrieve account: user not found"), http.StatusNotFound
 		}
-		return u.Message(false, "Failed to retrieve account: "+err.Error())
+		return u.Message(false, "Failed to retrieve account: "+err.Error()), http.StatusInternalServerError
 	}
 
 	resp := u.Message(true, "")
@@ -193,43 +195,45 @@ func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) ma
 		account.Email = ""
 	}
 	resp["account"] = account
-	return resp
+	return resp, http.StatusOK
 }
 
-func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	if account.Email != "" {
-		if resp := account._emailValidator(DBConn); resp["status"] == false {
-			return resp
+		if resp, statusCode := account._emailValidator(DBConn); resp["status"] == false {
+			return resp, statusCode
 		}
 		updatedAccount["email"] = account.Email
 	}
 
 	if account.Username != "" {
-		if resp := account._usernameValidator(DBConn); resp["status"] == false {
-			return resp
+		if resp, statusCode := account._usernameValidator(DBConn); resp["status"] == false {
+			return resp, statusCode
 		}
 		updatedAccount["username"] = account.Username
 	}
 
 	for _, v := range updatedAccount {
 		if v != "" {
-			return u.Message(true, "")
+			return u.Message(true, ""), 0
 		}
 	}
-	return u.Message(false, "No fields specified for the update or fields were identical")
+	return u.Message(false, "No fields specified for the update or fields were identical"), http.StatusBadRequest
 }
 
 //Update : Update account information
-func (account *Account) Update(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) Update(DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	updatedAccount := map[string]string{}
 
-	if resp := account.validateUpdate(updatedAccount, DBConn); resp["status"] == false {
-		return resp
+	if resp, statusCode := account.validateUpdate(updatedAccount, DBConn); resp["status"] == false {
+		return resp, statusCode
 	}
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
+
+	updatedAccount["email"] = strings.ToLower(updatedAccount["email"])
 
 	userIDFilter := bson.D{{"_id", account.UserID}}
 	update := bson.D{
@@ -239,9 +243,9 @@ func (account *Account) Update(DBConn *mongo.Client) map[string]interface{} {
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to update account: account not found")
+			return u.Message(false, "Failed to update account: account not found"), http.StatusNotFound
 		}
-		return u.Message(false, "Failed to update account: "+err.Error())
+		return u.Message(false, "Failed to update account: "+err.Error()), http.StatusInternalServerError
 	}
-	return u.Message(true, "")
+	return u.Message(true, ""), http.StatusOK
 }

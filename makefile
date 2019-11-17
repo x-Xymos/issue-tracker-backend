@@ -6,13 +6,16 @@ BINARY_NAME1=account-api
 SRC_NAME2=src/services/issue-api/main/main.go
 BINARY_NAME2=issue-api
 
+SRC_NAME3=src/services/project-api/main/main.go
+BINARY_NAME3=project-api
+
 build:
 	go build -o  $(BUILD_DIR)$(BINARY_NAME1) -v $(SRC_NAME1)
 	go build -o  $(BUILD_DIR)$(BINARY_NAME2) -v $(SRC_NAME2)
+	go build -o  $(BUILD_DIR)$(BINARY_NAME3) -v $(SRC_NAME3)
 	
 run:
-	nohup bash ./run_server $(BUILD_DIR) $(BINARY_NAME1) &
-	nohup bash ./run_server $(BUILD_DIR) $(BINARY_NAME2) &
-
-
+	nohup bash ./run_service $(BUILD_DIR) $(BINARY_NAME1) &
+	nohup bash ./run_service $(BUILD_DIR) $(BINARY_NAME2) &
+	nohup bash ./run_service $(BUILD_DIR) $(BINARY_NAME3) &
 

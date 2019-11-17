@@ -1,7 +1,7 @@
 package main
 
 import (
-	Controller "issue-tracker-backend/src/services/issue-api/controllers"
+	Controller "issue-tracker-backend/src/services/project-api/controllers"
 	Service "issue-tracker-backend/src/servicetemplates"
 )
 

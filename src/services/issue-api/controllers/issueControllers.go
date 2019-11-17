@@ -1,12 +1,18 @@
-package signupcont
+package issuecontroller
 
 import (
 	"encoding/json"
+	"fmt"
+	IssueModel "issue-tracker-backend/src/models/issue"
 	Service "issue-tracker-backend/src/servicetemplates"
 	"net/http"
 )
 
 func home(w http.ResponseWriter, r *http.Request) {
+
+	issue := &IssueModel.Issue{}
+
+	fmt.Println(issue)
 
 	w.Header().Set("Content-Type", "application/json")
 	userID := r.Context().Value("user").(string)
