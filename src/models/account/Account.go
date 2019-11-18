@@ -204,7 +204,7 @@ func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn 
 		if resp, statusCode := account._emailValidator(DBConn); resp["status"] == false {
 			return resp, statusCode
 		}
-		updatedAccount["email"] = account.Email
+		updatedAccount["email"] = strings.ToLower(account.Email)
 	}
 
 	if account.Username != "" {
@@ -232,8 +232,6 @@ func (account *Account) Update(DBConn *mongo.Client) (map[string]interface{}, in
 	}
 
 	collection := DBConn.Database("issue-tracker").Collection("accounts")
-
-	updatedAccount["email"] = strings.ToLower(updatedAccount["email"])
 
 	userIDFilter := bson.D{{"_id", account.UserID}}
 	update := bson.D{

@@ -1,2 +1,0 @@
-r=$(netstat -ntlp | tr -s " " | cut -d" " -f7 | grep $2 | grep -o -E '[0-9]+') 2>/dev/null; kill -9 $r;
-(cd $1; ./$2)
