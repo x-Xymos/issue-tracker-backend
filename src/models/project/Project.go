@@ -4,6 +4,8 @@ import (
 	"context"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -19,14 +21,20 @@ type Project struct {
 	createdAt string             `json:"createdAt"`
 }
 
+func newProjectCollection(DBConn *mongo.Client) *mongo.Collection {
+	return DBConn.Database("issue-tracker").Collection("projects")
+}
+
 func (project *Project) _titleValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if len(project.Title) < 1 || len(project.Title) > 64 {
+	project.Title = strings.TrimSpace(project.Title)
+	titleLen := utf8.RuneCountInString(project.Title)
+	if titleLen < 1 || titleLen > 64 {
 		return u.Message(false, "Title has to be between 1-64 characters long"), http.StatusBadRequest
 	}
 
 	tempProj := &Project{}
-	collection := DBConn.Database("issue-tracker").Collection("projects")
+	collection := newProjectCollection(DBConn)
 
 	//Project Title must be unique
 	projFilter := bson.D{{"title", project.Title}}
@@ -52,7 +60,7 @@ func (project *Project) Create(DBConn *mongo.Client) (map[string]interface{}, in
 		return resp, statusCode
 	}
 
-	collection := DBConn.Database("issue-tracker").Collection("projects")
+	collection := newProjectCollection(DBConn)
 	project.ID = primitive.NewObjectID()
 
 	_, err := collection.InsertOne(context.TODO(), project)
@@ -70,7 +78,7 @@ func (project *Project) Create(DBConn *mongo.Client) (map[string]interface{}, in
 //Get :
 func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	collection := DBConn.Database("issue-tracker").Collection("projects")
+	collection := newProjectCollection(DBConn)
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
@@ -108,18 +116,23 @@ func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) (m
 //GetAll :
 func (project *Project) GetAll(lastID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	collection := DBConn.Database("issue-tracker").Collection("projects")
+	collection := newProjectCollection(DBConn)
 
 	var projectFilter bson.D
 
 	if lastID != "" {
 		_lastID, _ := primitive.ObjectIDFromHex(lastID)
-		projectFilter = bson.D{
-			{"_id", bson.D{
+		projectFilter = append(projectFilter,
+			bson.E{"_id", bson.D{
 				{"$gt", _lastID},
 			},
-			}}
+			})
 	}
+
+	projectFilter = append(projectFilter, bson.E{"title", bson.D{
+		{"$regex", primitive.Regex{Pattern: project.Title, Options: "i"}},
+	}},
+	)
 
 	findOptions := options.Find()
 	findOptions.SetLimit(10)
@@ -161,30 +174,32 @@ func (project *Project) validateUpdate(updatedProject map[string]string, DBConn 
 		updatedProject["title"] = project.Title
 	}
 
+	for _, v := range updatedProject {
+		if v != "" {
+			return u.Message(true, ""), 0
+		}
+	}
 	return u.Message(false, "No fields specified for the update or fields were identical"), http.StatusBadRequest
 }
 
 //Update :
-func (project *Project) Update(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) Update(newProject *Project, DBConn *mongo.Client) (map[string]interface{}, int) {
 
 	updatedProject := map[string]string{}
 
-	if resp, statusCode := project.validateUpdate(updatedProject, DBConn); resp["status"] == false {
+	if resp, statusCode := newProject.validateUpdate(updatedProject, DBConn); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newProjectCollection(DBConn)
 
-	userIDFilter := bson.D{{"_id", project.ID}}
+	projectFilter := bson.D{{"title", project.Title}, {"ownerID", project.OwnerID}}
 	update := bson.D{
 		{"$set", updatedProject},
 	}
-	_, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
+	_, err := collection.UpdateOne(context.TODO(), projectFilter, update) //this doesn't produce an error if the object that needs to be updated isn't found
 
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to update project: project not found"), http.StatusNotFound
-		}
 		return u.Message(false, "Failed to update project: "+err.Error()), http.StatusInternalServerError
 	}
 

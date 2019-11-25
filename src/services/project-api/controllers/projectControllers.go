@@ -1,7 +1,9 @@
 package projectcontroller
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	ProjectModel "issue-tracker-backend/src/models/project"
 	Service "issue-tracker-backend/src/servicetemplates"
 	u "issue-tracker-backend/src/utils"
@@ -11,21 +13,22 @@ import (
 )
 
 func project(w http.ResponseWriter, r *http.Request) {
-
 	switch r.Method {
 	case http.MethodGet:
-		paramHeader := r.Header.Get("params")
-		if paramHeader == "" {
-			u.Respond(w, u.Message(false, "Invalid request: Missing query parameters"), http.StatusBadRequest)
-			return
-		}
-		project := &ProjectModel.Project{}
+		//GET:
+		//Returns a project
+		//The request payload should contain the title of the project to retrieve
+		// {title: required}
+		//Example payload:
+		//{"title": "projectTitle"}
 
-		err := json.Unmarshal([]byte(paramHeader), project)
+		project := &ProjectModel.Project{}
+		err := json.NewDecoder(r.Body).Decode(project) //decode the request body into struct and failed if any error occur
 		if err != nil {
 			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
+
 		userID := r.Context().Value("userID")
 
 		if userID != nil {
@@ -37,6 +40,12 @@ func project(w http.ResponseWriter, r *http.Request) {
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPost:
+		//POST:
+		//Creates a new project
+		//The request payload should cointain information required to create a new project
+		// {title: required}
+		//Example payload:
+		//{"title": "projectTitle"}
 		userID := r.Context().Value("userID")
 		if userID != nil {
 			objID, _ := primitive.ObjectIDFromHex(userID.(string))
@@ -53,16 +62,32 @@ func project(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case http.MethodPut:
+		//PUT:
+		//Updates a project
+		//The request payload should be an array containing 2 elements:
+		// elem1: {title: required}
+		// elem2: {title: required}
+		//Example payload:
+		// [{"title": "projectTitle"},{"title": "changedProjectTitle"}]
+
 		userID := r.Context().Value("userID")
 		if userID != nil {
 			objID, _ := primitive.ObjectIDFromHex(userID.(string))
-			project := &ProjectModel.Project{OwnerID: objID}
-			err := json.NewDecoder(r.Body).Decode(project) //decode the request body into struct and failed if any error occur
+
+			var projects []*ProjectModel.Project
+			data, err := ioutil.ReadAll(r.Body)
+			r.Body.Close()
+
 			if err != nil {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp, statusCode := project.Update(Service.DBConn)
+			if err := json.Unmarshal([]byte(data), &projects); err != nil {
+				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+				return
+			}
+			projects[0].OwnerID = objID
+			resp, statusCode := projects[0].Update(projects[1], Service.DBConn)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusUnauthorized)
@@ -72,9 +97,47 @@ func project(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func projects(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		//GET:
+		//Returns 10 projects based on an optional search query,
+		//can be paginated by providing the id of the last project that was retrieved
+		//{title: optional, lastID: optional}
+		//Payload examples:
+		//{"title": "optionalSearchQuery", "lastID","5dd1c87c662abc93b4ddbaa9"}
+		//{"title": "", "lastID","5dd1c87c662abc93b4ddbaa9"}
+		//{"title": "optionalSearchQuery", "lastID",""}
+		defer r.Body.Close()
+		var data map[string]interface{}
+
+		reqBody, _ := ioutil.ReadAll(r.Body)
+		r.Body.Close()
+
+		if err := json.Unmarshal(reqBody, &data); err != nil {
+			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+			return
+		}
+
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(reqBody))
+
+		project := &ProjectModel.Project{}
+		err := json.NewDecoder(r.Body).Decode(project) //decode the request body into struct and failed if any error occur
+		if err != nil {
+			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+			return
+		}
+		resp, statusCode := project.GetAll(data["lastID"].(string), Service.DBConn)
+		u.Respond(w, resp, statusCode)
+	default:
+		u.Respond(w, u.Message(false, "Error: Method unsupported"), http.StatusMethodNotAllowed)
+	}
+}
+
 //Routes : an array of route bindings
 var Routes = []Service.RouteBinding{
 	Service.RouteBinding{"/api/project", project, []string{"GET", "POST", "PUT", "DELETE"}},
+	Service.RouteBinding{"/api/projects", projects, []string{"GET"}},
 }
 
 //ServiceName : service name

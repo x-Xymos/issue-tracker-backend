@@ -14,18 +14,14 @@ func profile(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		paramHeader := r.Header.Get("params")
-		if paramHeader == "" {
-			u.Respond(w, u.Message(false, "Invalid request: Missing query parameters"), http.StatusBadRequest)
-			return
-		}
-		account := &AccountModel.Account{}
 
-		err := json.Unmarshal([]byte(paramHeader), account)
+		account := &AccountModel.Account{}
+		err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 		if err != nil {
 			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
+
 		userID := r.Context().Value("userID")
 
 		if userID != nil {

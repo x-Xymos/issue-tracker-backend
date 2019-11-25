@@ -6,11 +6,13 @@ import (
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/dgrijalva/jwt-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -29,19 +31,25 @@ type Token struct {
 	jwt.StandardClaims
 }
 
+func newAccountCollection(DBConn *mongo.Client) *mongo.Collection {
+	return DBConn.Database("issue-tracker").Collection("accounts")
+}
+
 func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if !strings.Contains(account.Email, "@") || len(account.Email) < 5 {
+	account.Email = strings.ReplaceAll(account.Email, " ", "")
+	if !strings.Contains(account.Email, "@") || utf8.RuneCountInString(account.Email) < 5 {
 		return u.Message(false, "Invalid email address"), http.StatusBadRequest
 	}
 
 	tempAcc := &Account{}
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 
 	//Email must be unique
 	emailFilter := bson.D{{"email", account.Email}}
 
-	err := collection.FindOne(context.TODO(), emailFilter).Decode(&tempAcc)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	err := collection.FindOne(context.TODO(), emailFilter, findOptions).Decode(&tempAcc)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
 	}
@@ -54,16 +62,19 @@ func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interf
 
 func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	if len(account.Username) < 3 {
+	account.Username = strings.ReplaceAll(account.Username, " ", "")
+
+	if utf8.RuneCountInString(account.Username) < 3 {
 		return u.Message(false, "Username has to be at least 3 characters long"), http.StatusBadRequest
 	}
 
 	tempAcc := &Account{}
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 	//Username must be unique
 	usernameFilter := bson.D{{"username", account.Username}}
 
-	err := collection.FindOne(context.TODO(), usernameFilter).Decode(&tempAcc)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	err := collection.FindOne(context.TODO(), usernameFilter, findOptions).Decode(&tempAcc)
 
 	if err != mongo.ErrNoDocuments && err != nil {
 		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
@@ -77,7 +88,9 @@ func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]int
 
 func (account *Account) _passwordValidator() (map[string]interface{}, int) {
 
-	if len(account.Password) < 6 {
+	account.Password = strings.ReplaceAll(account.Password, " ", "")
+
+	if utf8.RuneCountInString(account.Password) < 6 {
 		return u.Message(false, "Password has to be at least 6 characters long"), http.StatusBadRequest
 	}
 	return u.Message(true, ""), 0
@@ -108,7 +121,7 @@ func (account *Account) Create(DBConn *mongo.Client) (map[string]interface{}, in
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
 	account.Email = strings.ToLower(account.Email)
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
@@ -127,12 +140,13 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 
 	storedAccount := &Account{}
 
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 
 	account.Email = strings.ToLower(account.Email)
 	emailFilter := bson.D{{"email", account.Email}}
 
-	err := collection.FindOne(context.TODO(), emailFilter).Decode(&storedAccount)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	err := collection.FindOne(context.TODO(), emailFilter, findOptions).Decode(&storedAccount)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return u.Message(false, "Failed to log in: Email address doesn't match any accounts in our records, please try again")
@@ -164,7 +178,7 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 //Get : Retrieve account information
 func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
 
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
@@ -175,7 +189,8 @@ func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (m
 		userFilter = bson.D{{"_id", currID}}
 	}
 
-	err := collection.FindOne(context.TODO(), userFilter).Decode(account)
+	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	err := collection.FindOne(context.TODO(), userFilter, findOptions).Decode(account)
 	account.Password = ""
 
 	if err != nil {
@@ -231,7 +246,7 @@ func (account *Account) Update(DBConn *mongo.Client) (map[string]interface{}, in
 		return resp, statusCode
 	}
 
-	collection := DBConn.Database("issue-tracker").Collection("accounts")
+	collection := newAccountCollection(DBConn)
 
 	userIDFilter := bson.D{{"_id", account.UserID}}
 	update := bson.D{

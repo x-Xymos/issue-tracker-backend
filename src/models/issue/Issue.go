@@ -19,6 +19,10 @@ type Issue struct {
 	DateCreated time.Time
 }
 
+func newIssueCollection(DBConn *mongo.Client) *mongo.Collection {
+	return DBConn.Database("issue-tracker").Collection("issues")
+}
+
 func (issue *Issue) _titleValidator(DBConn *mongo.Client) map[string]interface{} {
 
 	if len(issue.Title) < 1 {
