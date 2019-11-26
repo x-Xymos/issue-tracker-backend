@@ -14,14 +14,18 @@ func profile(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-
+		//GET:
+		//Returns a user profile
+		//The request payload should contain the username of the user to retrieve
+		// {username: required}
+		//Example payload:
+		//{"username": "Tom"}
 		account := &AccountModel.Account{}
-		err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
-		if err != nil {
-			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+		account.Username = r.URL.Query().Get("username")
+		if account.Username == "" {
+			u.Respond(w, u.Message(false, "Invalid request: Missing username"), http.StatusBadRequest)
 			return
 		}
-
 		userID := r.Context().Value("userID")
 
 		if userID != nil {
@@ -33,6 +37,12 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPut:
+		//PUT:
+		//Updates a user profile
+		//The request payload should contain the fields you want to update
+		//Example payload:
+		//{"username": "Tom", "email": "newEmail@gmail.com"}
+
 		userID := r.Context().Value("userID")
 		if userID != nil {
 			objID, _ := primitive.ObjectIDFromHex(userID.(string))
@@ -50,7 +60,6 @@ func profile(w http.ResponseWriter, r *http.Request) {
 	default:
 		u.Respond(w, u.Message(false, "Invalid request: Method unsupported"), http.StatusMethodNotAllowed)
 	}
-
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {

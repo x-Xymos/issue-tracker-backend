@@ -182,12 +182,7 @@ func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (m
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
-	userFilter := bson.D{{}}
-	if account.Username != "" {
-		userFilter = bson.D{{"username", account.Username}}
-	} else {
-		userFilter = bson.D{{"_id", currID}}
-	}
+	userFilter := bson.D{{"username", account.Username}}
 
 	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
 	err := collection.FindOne(context.TODO(), userFilter, findOptions).Decode(account)
