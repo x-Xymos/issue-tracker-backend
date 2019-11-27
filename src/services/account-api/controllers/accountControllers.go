@@ -33,7 +33,7 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userID = ""
 		}
-		resp, statusCode := account.Get(userID.(string), Service.DBConn)
+		resp, statusCode := account.Get(userID.(string), Service.DB)
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPut:
@@ -52,7 +52,7 @@ func profile(w http.ResponseWriter, r *http.Request) {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp, statusCode := account.Update(Service.DBConn)
+			resp, statusCode := account.Update(Service.DB)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusNotFound)
@@ -63,15 +63,20 @@ func profile(w http.ResponseWriter, r *http.Request) {
 }
 
 func signup(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
 
-	account := &AccountModel.Account{}
-	err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
-	if err != nil {
-		u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
-		return
+		account := &AccountModel.Account{}
+		err := json.NewDecoder(r.Body).Decode(&account) //decode the request body into struct and failed if any error occur
+		if err != nil {
+			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+			return
+		}
+		resp, statusCode := account.Create(Service.DB) //Create account
+		u.Respond(w, resp, statusCode)
+	default:
+		u.Respond(w, u.Message(false, "Invalid request: Method unsupported"), http.StatusMethodNotAllowed)
 	}
-	resp, statusCode := account.Create(Service.DBConn) //Create account
-	u.Respond(w, resp, statusCode)
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +89,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//resp := account.Login(&account.Email, &account.Password, Service.DBConn)
-	resp := account.Login(Service.DBConn)
+	resp := account.Login(Service.DB)
 
 	u.Respond(w, resp, http.StatusOK)
 
@@ -97,6 +101,8 @@ var Routes = []Service.RouteBinding{
 	Service.RouteBinding{"/api/account/signup", signup, []string{"POST"}},
 	Service.RouteBinding{"/api/account/profile", profile, []string{"GET", "PUT"}},
 }
+
+var DBName = "issue-tracker"
 
 //ServiceName : service name
 var ServiceName = "Account-api"

@@ -21,11 +21,11 @@ type Project struct {
 	createdAt string             `json:"createdAt"`
 }
 
-func newProjectCollection(DBConn *mongo.Client) *mongo.Collection {
-	return DBConn.Database("issue-tracker").Collection("projects")
+func newProjectCollection(DB *mongo.Database) *mongo.Collection {
+	return DB.Collection("projects")
 }
 
-func (project *Project) _titleValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) _titleValidator(DB *mongo.Database) (map[string]interface{}, int) {
 
 	project.Title = strings.TrimSpace(project.Title)
 	titleLen := utf8.RuneCountInString(project.Title)
@@ -34,7 +34,7 @@ func (project *Project) _titleValidator(DBConn *mongo.Client) (map[string]interf
 	}
 
 	tempProj := &Project{}
-	collection := newProjectCollection(DBConn)
+	collection := newProjectCollection(DB)
 
 	//Project Title must be unique
 	projFilter := bson.D{{"title", project.Title}}
@@ -54,13 +54,13 @@ func (project *Project) _titleValidator(DBConn *mongo.Client) (map[string]interf
 }
 
 //Create :
-func (project *Project) Create(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) Create(DB *mongo.Database) (map[string]interface{}, int) {
 
-	if resp, statusCode := project._titleValidator(DBConn); resp["status"] == false {
+	if resp, statusCode := project._titleValidator(DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	collection := newProjectCollection(DBConn)
+	collection := newProjectCollection(DB)
 	project.ID = primitive.NewObjectID()
 
 	_, err := collection.InsertOne(context.TODO(), project)
@@ -76,9 +76,9 @@ func (project *Project) Create(DBConn *mongo.Client) (map[string]interface{}, in
 }
 
 //Get :
-func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) Get(authenticatedUserID string, DB *mongo.Database) (map[string]interface{}, int) {
 
-	collection := newProjectCollection(DBConn)
+	collection := newProjectCollection(DB)
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
@@ -114,9 +114,9 @@ func (project *Project) Get(authenticatedUserID string, DBConn *mongo.Client) (m
 }
 
 //GetAll :
-func (project *Project) GetAll(lastID string, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) GetAll(lastID string, DB *mongo.Database) (map[string]interface{}, int) {
 
-	collection := newProjectCollection(DBConn)
+	collection := newProjectCollection(DB)
 
 	var projectFilter bson.D
 
@@ -165,10 +165,10 @@ func (project *Project) GetAll(lastID string, DBConn *mongo.Client) (map[string]
 	///https://arpitbhayani.me/blogs/fast-and-efficient-pagination-in-mongodb
 }
 
-func (project *Project) validateUpdate(updatedProject map[string]string, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) validateUpdate(updatedProject map[string]string, DB *mongo.Database) (map[string]interface{}, int) {
 
 	if project.Title != "" {
-		if resp, statusCode := project._titleValidator(DBConn); resp["status"] == false {
+		if resp, statusCode := project._titleValidator(DB); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedProject["title"] = project.Title
@@ -183,15 +183,15 @@ func (project *Project) validateUpdate(updatedProject map[string]string, DBConn 
 }
 
 //Update :
-func (project *Project) Update(newProject *Project, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (project *Project) Update(newProject *Project, DB *mongo.Database) (map[string]interface{}, int) {
 
 	updatedProject := map[string]string{}
 
-	if resp, statusCode := newProject.validateUpdate(updatedProject, DBConn); resp["status"] == false {
+	if resp, statusCode := newProject.validateUpdate(updatedProject, DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	collection := newProjectCollection(DBConn)
+	collection := newProjectCollection(DB)
 
 	projectFilter := bson.D{{"title", project.Title}, {"ownerID", project.OwnerID}}
 	update := bson.D{

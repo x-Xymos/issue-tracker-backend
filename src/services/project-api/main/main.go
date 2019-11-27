@@ -6,7 +6,5 @@ import (
 )
 
 func main() {
-
-	Service.Start(&Controller.Routes, &Controller.Port, &Controller.ServiceName)
-
+	Service.Start(&Controller.Routes, &Controller.Port, &Controller.ServiceName, &Controller.DBName)
 }

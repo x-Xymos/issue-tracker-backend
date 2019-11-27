@@ -25,6 +25,8 @@ var Routes = []Service.RouteBinding{
 	Service.RouteBinding{"/api/", home, []string{"GET"}},
 }
 
+var DBName = "issue-tracker"
+
 //ServiceName : service name
 var ServiceName = "Issue-api"
 

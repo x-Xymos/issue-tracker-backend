@@ -36,7 +36,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userID = ""
 		}
-		resp, statusCode := project.Get(userID.(string), Service.DBConn)
+		resp, statusCode := project.Get(userID.(string), Service.DB)
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPost:
@@ -55,7 +55,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp, statusCode := project.Create(Service.DBConn)
+			resp, statusCode := project.Create(Service.DB)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusUnauthorized)
@@ -87,7 +87,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			projects[0].OwnerID = objID
-			resp, statusCode := projects[0].Update(projects[1], Service.DBConn)
+			resp, statusCode := projects[0].Update(projects[1], Service.DB)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusUnauthorized)
@@ -127,7 +127,7 @@ func projects(w http.ResponseWriter, r *http.Request) {
 			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
-		resp, statusCode := project.GetAll(data["lastID"].(string), Service.DBConn)
+		resp, statusCode := project.GetAll(data["lastID"].(string), Service.DB)
 		u.Respond(w, resp, statusCode)
 	default:
 		u.Respond(w, u.Message(false, "Error: Method unsupported"), http.StatusMethodNotAllowed)
@@ -139,6 +139,8 @@ var Routes = []Service.RouteBinding{
 	Service.RouteBinding{"/api/project", project, []string{"GET", "POST", "PUT", "DELETE"}},
 	Service.RouteBinding{"/api/projects", projects, []string{"GET"}},
 }
+
+var DBName = "issue-tracker"
 
 //ServiceName : service name
 var ServiceName = "Project-api"

@@ -31,11 +31,11 @@ type Token struct {
 	jwt.StandardClaims
 }
 
-func newAccountCollection(DBConn *mongo.Client) *mongo.Collection {
-	return DBConn.Database("issue-tracker").Collection("accounts")
+func NewAccountCollection(DB *mongo.Database) *mongo.Collection {
+	return DB.Collection("accounts")
 }
 
-func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) _emailValidator(DB *mongo.Database) (map[string]interface{}, int) {
 
 	account.Email = strings.ReplaceAll(account.Email, " ", "")
 	if !strings.Contains(account.Email, "@") || utf8.RuneCountInString(account.Email) < 5 {
@@ -43,7 +43,7 @@ func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interf
 	}
 
 	tempAcc := &Account{}
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 
 	//Email must be unique
 	emailFilter := bson.D{{"email", account.Email}}
@@ -55,12 +55,12 @@ func (account *Account) _emailValidator(DBConn *mongo.Client) (map[string]interf
 	}
 
 	if tempAcc.Email != "" {
-		return u.Message(false, "Email address already in use by another user."), http.StatusBadRequest
+		return u.Message(false, "Email address already in use by another user"), http.StatusBadRequest
 	}
 	return u.Message(true, ""), 0
 }
 
-func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) _usernameValidator(DB *mongo.Database) (map[string]interface{}, int) {
 
 	account.Username = strings.ReplaceAll(account.Username, " ", "")
 
@@ -69,7 +69,7 @@ func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]int
 	}
 
 	tempAcc := &Account{}
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 	//Username must be unique
 	usernameFilter := bson.D{{"username", account.Username}}
 
@@ -81,7 +81,7 @@ func (account *Account) _usernameValidator(DBConn *mongo.Client) (map[string]int
 	}
 
 	if tempAcc.Username != "" {
-		return u.Message(false, "Username already in use by another user."), http.StatusBadRequest
+		return u.Message(false, "Username already in use by another user"), http.StatusBadRequest
 	}
 	return u.Message(true, ""), 0
 }
@@ -97,13 +97,13 @@ func (account *Account) _passwordValidator() (map[string]interface{}, int) {
 
 }
 
-func (account *Account) validateAccountCreation(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) validateAccountCreation(DB *mongo.Database) (map[string]interface{}, int) {
 
-	if resp, statusCode := account._emailValidator(DBConn); resp["status"] == false {
+	if resp, statusCode := account._emailValidator(DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	if resp, statusCode := account._usernameValidator(DBConn); resp["status"] == false {
+	if resp, statusCode := account._usernameValidator(DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
@@ -111,9 +111,9 @@ func (account *Account) validateAccountCreation(DBConn *mongo.Client) (map[strin
 }
 
 //Create : account creation
-func (account *Account) Create(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) Create(DB *mongo.Database) (map[string]interface{}, int) {
 
-	if resp, statusCode := account.validateAccountCreation(DBConn); resp["status"] == false {
+	if resp, statusCode := account.validateAccountCreation(DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
@@ -121,7 +121,7 @@ func (account *Account) Create(DBConn *mongo.Client) (map[string]interface{}, in
 	account.Password = string(hashedPassword)
 	account.UserID = primitive.NewObjectID()
 	account.Email = strings.ToLower(account.Email)
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 
 	_, err := collection.InsertOne(context.TODO(), account)
 	if err != nil {
@@ -131,16 +131,16 @@ func (account *Account) Create(DBConn *mongo.Client) (map[string]interface{}, in
 	account.Password = "" //delete password
 
 	resp := u.Message(true, "Account has been created")
-	resp["account"] = account
+	//resp["account"] = account
 	return resp, http.StatusCreated
 }
 
 //Login : login
-func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
+func (account *Account) Login(DB *mongo.Database) map[string]interface{} {
 
 	storedAccount := &Account{}
 
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 
 	account.Email = strings.ToLower(account.Email)
 	emailFilter := bson.D{{"email", account.Email}}
@@ -176,9 +176,9 @@ func (account *Account) Login(DBConn *mongo.Client) map[string]interface{} {
 }
 
 //Get : Retrieve account information
-func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) Get(authenticatedUserID string, DB *mongo.Database) (map[string]interface{}, int) {
 
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 
 	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 
@@ -208,17 +208,17 @@ func (account *Account) Get(authenticatedUserID string, DBConn *mongo.Client) (m
 	return resp, http.StatusOK
 }
 
-func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) validateUpdate(updatedAccount map[string]string, DB *mongo.Database) (map[string]interface{}, int) {
 
 	if account.Email != "" {
-		if resp, statusCode := account._emailValidator(DBConn); resp["status"] == false {
+		if resp, statusCode := account._emailValidator(DB); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedAccount["email"] = strings.ToLower(account.Email)
 	}
 
 	if account.Username != "" {
-		if resp, statusCode := account._usernameValidator(DBConn); resp["status"] == false {
+		if resp, statusCode := account._usernameValidator(DB); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedAccount["username"] = account.Username
@@ -233,15 +233,15 @@ func (account *Account) validateUpdate(updatedAccount map[string]string, DBConn 
 }
 
 //Update : Update account information
-func (account *Account) Update(DBConn *mongo.Client) (map[string]interface{}, int) {
+func (account *Account) Update(DB *mongo.Database) (map[string]interface{}, int) {
 
 	updatedAccount := map[string]string{}
 
-	if resp, statusCode := account.validateUpdate(updatedAccount, DBConn); resp["status"] == false {
+	if resp, statusCode := account.validateUpdate(updatedAccount, DB); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	collection := newAccountCollection(DBConn)
+	collection := NewAccountCollection(DB)
 
 	userIDFilter := bson.D{{"_id", account.UserID}}
 	update := bson.D{
