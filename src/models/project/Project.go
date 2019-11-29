@@ -1,74 +1,39 @@
 package project
 
 import (
-	"context"
+	"issue-tracker-backend/src/db"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 //Project : Project struct
 type Project struct {
-	ID        primitive.ObjectID `bson:"_id, omitempty"`
-	OwnerID   primitive.ObjectID `bson:"ownerID, omitempty"`
+	ID        primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
+	OwnerID   primitive.ObjectID `json:"ownerID,omitempty" bson:"ownerID,omitempty"`
 	Title     string             `json:"title"`
-	createdAt string             `json:"createdAt"`
-}
-
-func newProjectCollection(DB *mongo.Database) *mongo.Collection {
-	return DB.Collection("projects")
-}
-
-func (project *Project) _titleValidator(DB *mongo.Database) (map[string]interface{}, int) {
-
-	project.Title = strings.TrimSpace(project.Title)
-	titleLen := utf8.RuneCountInString(project.Title)
-	if titleLen < 1 || titleLen > 64 {
-		return u.Message(false, "Title has to be between 1-64 characters long"), http.StatusBadRequest
-	}
-
-	tempProj := &Project{}
-	collection := newProjectCollection(DB)
-
-	//Project Title must be unique
-	projFilter := bson.D{{"title", project.Title}}
-
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
-	err := collection.FindOne(context.TODO(), projFilter, findOptions).Decode(&tempProj)
-
-	if err != nil && err != mongo.ErrNoDocuments {
-		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
-	}
-
-	if tempProj.Title != "" {
-		return u.Message(false, "Title has to be unique."), http.StatusBadRequest
-	}
-
-	return u.Message(true, ""), 0
+	CreatedAt string             `json:"createdAt,omitempty" bson:"-"`
 }
 
 //Create :
-func (project *Project) Create(DB *mongo.Database) (map[string]interface{}, int) {
+func (project *Project) Create(DBConnection interface{}) (map[string]interface{}, int) {
 
-	if resp, statusCode := project._titleValidator(DB); resp["status"] == false {
-		return resp, statusCode
-	}
+	// if resp, statusCode := v._titleValidator(DB); resp["status"] == false {
+	// 	return resp, statusCode
+	// }
+	////this should take an array of validators
 
-	collection := newProjectCollection(DB)
 	project.ID = primitive.NewObjectID()
 
-	_, err := collection.InsertOne(context.TODO(), project)
+	err := db.InsertOne(DBConnection, "projects", project)
 	if err != nil {
-		return u.Message(false, "Failed to create project: "+err.Error()), http.StatusInternalServerError
+		return u.Message(false, err.Error()), http.StatusInternalServerError
 	}
-
-	project.createdAt = project.ID.Timestamp().String()
+	project.CreatedAt = project.ID.Timestamp().String()
 
 	response := u.Message(true, "")
 	response["project"] = project
@@ -76,88 +41,56 @@ func (project *Project) Create(DB *mongo.Database) (map[string]interface{}, int)
 }
 
 //Get :
-func (project *Project) Get(authenticatedUserID string, DB *mongo.Database) (map[string]interface{}, int) {
+func (project *Project) Get(authenticatedUserID string, DBConnection interface{}) (map[string]interface{}, int) {
 
-	collection := newProjectCollection(DB)
-
-	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
-
-	var projFilter bson.D
-	if project.Title != "" {
-		projFilter = bson.D{{"title", project.Title}}
-	} else {
+	if project.Title == "" {
 		return u.Message(false, "Missing project title"), http.StatusBadRequest
 	}
 
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
+	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
+	filterMap := map[string]interface{}{
+		"title": project.Title,
+	}
 
-	err := collection.FindOne(context.TODO(), projFilter, findOptions).Decode(project)
-
-	resp := map[string]interface{}{"project": project}
+	results, err := db.FindOne(DBConnection, "projects", filterMap, []Project{}, false)
 
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to retrieve project: Project not found"), http.StatusNotFound
-		}
 		return u.Message(false, "Failed to retrieve project: "+err.Error()), http.StatusInternalServerError
 	}
 
-	if project.OwnerID == currID {
+	_, ok := results.(*Project)
+	if !ok {
+		return u.Message(false, "Failed to cast interface to struct: "), http.StatusInternalServerError
+	}
+
+	resp := map[string]interface{}{}
+
+	if results.(*Project).OwnerID == currID {
 		resp["projectOwner"] = true
-		project.createdAt = project.ID.Timestamp().String()
+		results.(*Project).CreatedAt = results.(*Project).ID.Timestamp().String()
 	} else {
 		resp["projectOwner"] = false
 	}
-
+	resp["project"] = results
 	resp["status"] = true
+
 	return resp, http.StatusOK
 }
 
 //GetAll :
-func (project *Project) GetAll(lastID string, DB *mongo.Database) (map[string]interface{}, int) {
+func (project *Project) GetAll(lastID string, DBConnection interface{}) (map[string]interface{}, int) {
 
-	collection := newProjectCollection(DB)
-
-	var projectFilter bson.D
-
-	if lastID != "" {
-		_lastID, _ := primitive.ObjectIDFromHex(lastID)
-		projectFilter = append(projectFilter,
-			bson.E{"_id", bson.D{
-				{"$gt", _lastID},
-			},
-			})
+	_lastID, _ := primitive.ObjectIDFromHex(lastID)
+	filterMap := map[string]interface{}{
+		"_id":   map[string]interface{}{"$gt": _lastID},
+		"title": map[string]interface{}{"$regex": map[string]string{"pattern": project.Title, "options": "i"}},
 	}
 
-	projectFilter = append(projectFilter, bson.E{"title", bson.D{
-		{"$regex", primitive.Regex{Pattern: project.Title, Options: "i"}},
-	}},
-	)
+	results, err := db.FindMany(DBConnection, "projects", filterMap, []Project{}, 10)
 
-	findOptions := options.Find()
-	findOptions.SetLimit(10)
-	var results []*Project
-
-	cur, err := collection.Find(context.TODO(), projectFilter, findOptions)
 	if err != nil {
-		return u.Message(false, "Failed to retrieve projects: "+err.Error()), http.StatusInternalServerError
+		return u.Message(false, err.Error()), http.StatusInternalServerError
 	}
-
-	for cur.Next(context.TODO()) {
-
-		var elem Project
-		err := cur.Decode(&elem)
-		if err != nil {
-			return u.Message(false, "Failed to decode projects: "+err.Error()), http.StatusInternalServerError
-		}
-		results = append(results, &elem)
-	}
-
-	if err := cur.Err(); err != nil {
-		return u.Message(false, "Cursor error: "+err.Error()), http.StatusInternalServerError
-	}
-	// Close the cursor once finished
-	cur.Close(context.TODO())
 
 	resp := u.Message(true, "Success")
 	resp["results"] = results
@@ -165,10 +98,60 @@ func (project *Project) GetAll(lastID string, DB *mongo.Database) (map[string]in
 	///https://arpitbhayani.me/blogs/fast-and-efficient-pagination-in-mongodb
 }
 
-func (project *Project) validateUpdate(updatedProject map[string]string, DB *mongo.Database) (map[string]interface{}, int) {
+//Update :
+func (project *Project) Update(newProject *Project, DBConnection interface{}) (map[string]interface{}, int) {
+
+	updatedProject := map[string]string{}
+
+	if resp, statusCode := newProject.ValidateUpdate(updatedProject, DBConnection); resp["status"] == false {
+		return resp, statusCode
+	}
+	//this should take an array of validators
+	filterMap := map[string]interface{}{
+		"title":   project.Title,
+		"ownerID": project.OwnerID,
+	}
+
+	updateMap := map[string]interface{}{
+		"$set": updatedProject,
+	}
+
+	err := db.UpdateOne(DBConnection, "projects", filterMap, updateMap)
+	if err != nil {
+		return u.Message(false, "Failed to update project: "+err.Error()), http.StatusInternalServerError
+	}
+
+	return u.Message(true, ""), http.StatusOK
+}
+
+func TitleValidator(project *Project, DBConnection interface{}) (map[string]interface{}, int) {
+
+	project.Title = strings.TrimSpace(project.Title)
+	titleLen := utf8.RuneCountInString(project.Title)
+	if titleLen < 1 || titleLen > 64 {
+		return u.Message(false, "Title has to be between 1-64 characters long"), http.StatusBadRequest
+	}
+
+	filterMap := map[string]interface{}{
+		"title": project.Title,
+	}
+
+	_, err := db.FindOne(DBConnection, "projects", filterMap, []Project{}, false)
+
+	if err == mongo.ErrNoDocuments {
+		return u.Message(true, ""), 0
+	} else if err != nil {
+		return u.Message(false, "Server error, please try again"), http.StatusInternalServerError
+	}
+
+	return u.Message(false, "Title has to be unique."), http.StatusBadRequest
+
+}
+
+func (project *Project) ValidateUpdate(updatedProject map[string]string, DBConnection interface{}) (map[string]interface{}, int) {
 
 	if project.Title != "" {
-		if resp, statusCode := project._titleValidator(DB); resp["status"] == false {
+		if resp, statusCode := TitleValidator(project, DBConnection); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedProject["title"] = project.Title
@@ -180,28 +163,4 @@ func (project *Project) validateUpdate(updatedProject map[string]string, DB *mon
 		}
 	}
 	return u.Message(false, "No fields specified for the update or fields were identical"), http.StatusBadRequest
-}
-
-//Update :
-func (project *Project) Update(newProject *Project, DB *mongo.Database) (map[string]interface{}, int) {
-
-	updatedProject := map[string]string{}
-
-	if resp, statusCode := newProject.validateUpdate(updatedProject, DB); resp["status"] == false {
-		return resp, statusCode
-	}
-
-	collection := newProjectCollection(DB)
-
-	projectFilter := bson.D{{"title", project.Title}, {"ownerID", project.OwnerID}}
-	update := bson.D{
-		{"$set", updatedProject},
-	}
-	_, err := collection.UpdateOne(context.TODO(), projectFilter, update) //this doesn't produce an error if the object that needs to be updated isn't found
-
-	if err != nil {
-		return u.Message(false, "Failed to update project: "+err.Error()), http.StatusInternalServerError
-	}
-
-	return u.Message(true, ""), http.StatusOK
 }

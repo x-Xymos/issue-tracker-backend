@@ -1,10 +1,10 @@
-package servicetemplates
+package server
 
 import (
 	"context"
 	"fmt"
-	"issue-tracker-backend/src/auth"
-	"issue-tracker-backend/src/servicetemplates/db"
+	"issue-tracker-backend/src/db"
+	"issue-tracker-backend/src/middleware/auth"
 	"log"
 	"net/http"
 	"os"
@@ -22,24 +22,23 @@ type RouteBinding struct {
 	Method   []string
 }
 
-//DB : creates a DB connection that is used by the service
-var DB *mongo.Database
+var DBConnection *mongo.Database
 var Router *mux.Router
 var ctx context.Context
 var cancel context.CancelFunc
 
-//Stop : stop the listener
+//Stop : stop the server
 func Stop() {
 	cancel()
 }
 
-//Start : start listener
+//Start : start server
 //requires a routes array containing all
 //the RouteBindings that this service will accept
 func Start(routes *[]RouteBinding, port *string, serviceName *string, DBName *string) {
 	ctx, cancel = context.WithCancel(context.Background())
 
-	DB = db.Connect().Database(*DBName)
+	DBConnection = db.Connect(DBName)
 
 	Router = mux.NewRouter().StrictSlash(true)
 	Router.Use(auth.JwtAuthentication) //attach JWT auth middleware

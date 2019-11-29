@@ -107,11 +107,6 @@ func TestSignup(t *testing.T) {
 	for _, request := range requests {
 		request.ExecuteRequest(t, Router)
 	}
-
-	// if m["account"].(map[string]interface{})["username"] != "testUser" {
-	// if _, ok := i.(map[string]interface{}); ok {
-	// 	fmt.Println("i can be asserted to Stringer")
-	// }
 }
 
 func TestProfile(t *testing.T) {

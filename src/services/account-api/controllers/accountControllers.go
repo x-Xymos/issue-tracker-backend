@@ -3,7 +3,7 @@ package logincontroller
 import (
 	"encoding/json"
 	AccountModel "issue-tracker-backend/src/models/account"
-	Service "issue-tracker-backend/src/servicetemplates"
+	Server "issue-tracker-backend/src/server"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 
@@ -29,11 +29,15 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value("userID")
 
 		if userID != nil {
-			userID = userID.(string)
+			var ok bool
+			userID, ok = userID.(string)
+			if !ok {
+				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
+			}
 		} else {
 			userID = ""
 		}
-		resp, statusCode := account.Get(userID.(string), Service.DB)
+		resp, statusCode := account.Get(userID.(string), Server.DBConnection) // remove the  userID.(string) part and change to userID
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPut:
@@ -45,14 +49,15 @@ func profile(w http.ResponseWriter, r *http.Request) {
 
 		userID := r.Context().Value("userID")
 		if userID != nil {
-			objID, _ := primitive.ObjectIDFromHex(userID.(string))
+			objID, _ := primitive.ObjectIDFromHex(userID.(string)) //converting to object id from hex needs to be moved into a function for abstraction
 			account := &AccountModel.Account{UserID: objID}
 			err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 			if err != nil {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp, statusCode := account.Update(Service.DB)
+
+			resp, statusCode := account.Update(Server.DBConnection)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusNotFound)
@@ -72,7 +77,7 @@ func signup(w http.ResponseWriter, r *http.Request) {
 			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
-		resp, statusCode := account.Create(Service.DB) //Create account
+		resp, statusCode := account.Create(Server.DBConnection) //Create account
 		u.Respond(w, resp, statusCode)
 	default:
 		u.Respond(w, u.Message(false, "Invalid request: Method unsupported"), http.StatusMethodNotAllowed)
@@ -89,23 +94,23 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := account.Login(Service.DB)
+	resp := account.Login(Server.DBConnection)
 
 	u.Respond(w, resp, http.StatusOK)
 
 }
 
 //Routes : an array of route bindings
-var Routes = []Service.RouteBinding{
-	Service.RouteBinding{"/api/account/login", login, []string{"POST"}},
-	Service.RouteBinding{"/api/account/signup", signup, []string{"POST"}},
-	Service.RouteBinding{"/api/account/profile", profile, []string{"GET", "PUT"}},
+var Routes = []Server.RouteBinding{
+	Server.RouteBinding{"/api/account/login", login, []string{"POST"}},
+	Server.RouteBinding{"/api/account/signup", signup, []string{"POST"}},
+	Server.RouteBinding{"/api/account/profile", profile, []string{"GET", "PUT"}},
 }
 
 var DBName = "issue-tracker"
 
-//ServiceName : service name
-var ServiceName = "Account-api"
+//ServerName : Server name
+var ServerName = "Account-api"
 
-//Port : service port
+//Port : Server port
 var Port = "8880"

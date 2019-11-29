@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"issue-tracker-backend/env"
+	"issue-tracker-backend/src/db"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"strings"
@@ -18,11 +19,12 @@ import (
 
 //Account : user account struct
 type Account struct {
-	UserID    primitive.ObjectID `bson:"_id, omitempty"`
-	Username  string             `json:"username"`
-	Email     string             `json:"email"`
-	Password  string             `json:"password"`
-	CreatedAt string             `json:"createdAt"`
+	UserID    primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	Username  string             `json:"username,omitempty"`
+	Email     string             `json:"email,omitempty"`
+	Password  string             `json:"password,omitempty"`
+	CreatedAt string             `json:"createdAt,omitempty" bson:"-"`
+	//https://willnorris.com/2014/05/go-rest-apis-and-pointers/
 }
 
 //Token : JWT token struct
@@ -31,11 +33,11 @@ type Token struct {
 	jwt.StandardClaims
 }
 
-func NewAccountCollection(DB *mongo.Database) *mongo.Collection {
-	return DB.Collection("accounts")
+func NewAccountCollection(DBConnection interface{}) *mongo.Collection {
+	return DBConnection.(*mongo.Database).Collection("accounts")
 }
 
-func (account *Account) _emailValidator(DB *mongo.Database) (map[string]interface{}, int) {
+func (account *Account) _emailValidator(DBConnection interface{}) (map[string]interface{}, int) {
 
 	account.Email = strings.ReplaceAll(account.Email, " ", "")
 	if !strings.Contains(account.Email, "@") || utf8.RuneCountInString(account.Email) < 5 {
@@ -43,7 +45,7 @@ func (account *Account) _emailValidator(DB *mongo.Database) (map[string]interfac
 	}
 
 	tempAcc := &Account{}
-	collection := NewAccountCollection(DB)
+	collection := NewAccountCollection(DBConnection)
 
 	//Email must be unique
 	emailFilter := bson.D{{"email", account.Email}}
@@ -60,7 +62,7 @@ func (account *Account) _emailValidator(DB *mongo.Database) (map[string]interfac
 	return u.Message(true, ""), 0
 }
 
-func (account *Account) _usernameValidator(DB *mongo.Database) (map[string]interface{}, int) {
+func (account *Account) _usernameValidator(DBConnection interface{}) (map[string]interface{}, int) {
 
 	account.Username = strings.ReplaceAll(account.Username, " ", "")
 
@@ -69,7 +71,7 @@ func (account *Account) _usernameValidator(DB *mongo.Database) (map[string]inter
 	}
 
 	tempAcc := &Account{}
-	collection := NewAccountCollection(DB)
+	collection := NewAccountCollection(DBConnection)
 	//Username must be unique
 	usernameFilter := bson.D{{"username", account.Username}}
 
@@ -167,7 +169,8 @@ func (account *Account) Login(DB *mongo.Database) map[string]interface{} {
 	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
 
-	storedAccount.CreatedAt = storedAccount.UserID.Timestamp().String()
+	createdAt := storedAccount.UserID.Timestamp().String()
+	storedAccount.CreatedAt = createdAt
 
 	resp := u.Message(true, "Logged In")
 	resp["account"] = storedAccount
@@ -199,7 +202,8 @@ func (account *Account) Get(authenticatedUserID string, DB *mongo.Database) (map
 
 	if account.UserID == currID {
 		resp["accountOwner"] = true
-		account.CreatedAt = account.UserID.Timestamp().String()
+		createdAt := account.UserID.Timestamp().String()
+		account.CreatedAt = createdAt
 	} else {
 		resp["accountOwner"] = false
 		account.Email = ""
@@ -208,17 +212,17 @@ func (account *Account) Get(authenticatedUserID string, DB *mongo.Database) (map
 	return resp, http.StatusOK
 }
 
-func (account *Account) validateUpdate(updatedAccount map[string]string, DB *mongo.Database) (map[string]interface{}, int) {
+func (account *Account) validateUpdate(updatedAccount map[string]string, DBConnection interface{}) (map[string]interface{}, int) {
 
 	if account.Email != "" {
-		if resp, statusCode := account._emailValidator(DB); resp["status"] == false {
+		if resp, statusCode := account._emailValidator(DBConnection); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedAccount["email"] = strings.ToLower(account.Email)
 	}
 
 	if account.Username != "" {
-		if resp, statusCode := account._usernameValidator(DB); resp["status"] == false {
+		if resp, statusCode := account._usernameValidator(DBConnection); resp["status"] == false {
 			return resp, statusCode
 		}
 		updatedAccount["username"] = account.Username
@@ -233,27 +237,26 @@ func (account *Account) validateUpdate(updatedAccount map[string]string, DB *mon
 }
 
 //Update : Update account information
-func (account *Account) Update(DB *mongo.Database) (map[string]interface{}, int) {
+func (account *Account) Update(DBConnection interface{}) (map[string]interface{}, int) {
 
 	updatedAccount := map[string]string{}
 
-	if resp, statusCode := account.validateUpdate(updatedAccount, DB); resp["status"] == false {
+	if resp, statusCode := account.validateUpdate(updatedAccount, DBConnection); resp["status"] == false {
 		return resp, statusCode
 	}
-
-	collection := NewAccountCollection(DB)
-
-	userIDFilter := bson.D{{"_id", account.UserID}}
-	update := bson.D{
-		{"$set", updatedAccount},
+	//this should take an array of validators
+	filterMap := map[string]interface{}{
+		"_id": account.UserID,
 	}
-	_, err := collection.UpdateOne(context.TODO(), userIDFilter, update)
 
+	updateMap := map[string]interface{}{
+		"$set": updatedAccount,
+	}
+
+	err := db.UpdateOne(DBConnection, "accounts", filterMap, updateMap)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to update account: account not found"), http.StatusNotFound
-		}
-		return u.Message(false, "Failed to update account: "+err.Error()), http.StatusInternalServerError
+		return u.Message(false, "Failed to update: "+err.Error()), http.StatusInternalServerError
 	}
+
 	return u.Message(true, ""), http.StatusOK
 }

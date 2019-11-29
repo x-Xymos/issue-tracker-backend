@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	ProjectModel "issue-tracker-backend/src/models/project"
-	Service "issue-tracker-backend/src/servicetemplates"
+	Server "issue-tracker-backend/src/server"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 
@@ -36,7 +36,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 		} else {
 			userID = ""
 		}
-		resp, statusCode := project.Get(userID.(string), Service.DB)
+		resp, statusCode := project.Get(userID.(string), Server.DBConnection)
 		u.Respond(w, resp, statusCode)
 
 	case http.MethodPost:
@@ -55,7 +55,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-			resp, statusCode := project.Create(Service.DB)
+			resp, statusCode := project.Create(Server.DBConnection)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusUnauthorized)
@@ -87,7 +87,7 @@ func project(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			projects[0].OwnerID = objID
-			resp, statusCode := projects[0].Update(projects[1], Service.DB)
+			resp, statusCode := projects[0].Update(projects[1], Server.DBConnection)
 			u.Respond(w, resp, statusCode)
 		} else {
 			u.Respond(w, u.Message(false, "Error retrieving userID"), http.StatusUnauthorized)
@@ -127,7 +127,7 @@ func projects(w http.ResponseWriter, r *http.Request) {
 			u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 			return
 		}
-		resp, statusCode := project.GetAll(data["lastID"].(string), Service.DB)
+		resp, statusCode := project.GetAll(data["lastID"].(string), Server.DBConnection) //data["lastID"].(string) check  this first
 		u.Respond(w, resp, statusCode)
 	default:
 		u.Respond(w, u.Message(false, "Error: Method unsupported"), http.StatusMethodNotAllowed)
@@ -135,15 +135,15 @@ func projects(w http.ResponseWriter, r *http.Request) {
 }
 
 //Routes : an array of route bindings
-var Routes = []Service.RouteBinding{
-	Service.RouteBinding{"/api/project", project, []string{"GET", "POST", "PUT", "DELETE"}},
-	Service.RouteBinding{"/api/projects", projects, []string{"GET"}},
+var Routes = []Server.RouteBinding{
+	Server.RouteBinding{"/api/project", project, []string{"GET", "POST", "PUT", "DELETE"}},
+	Server.RouteBinding{"/api/projects", projects, []string{"GET"}},
 }
 
 var DBName = "issue-tracker"
 
-//ServiceName : service name
-var ServiceName = "Project-api"
+//ServerName : Server name
+var ServerName = "Project-api"
 
-//Port : service port
+//Port : Server port
 var Port = "8882"

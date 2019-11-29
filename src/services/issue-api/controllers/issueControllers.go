@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	IssueModel "issue-tracker-backend/src/models/issue"
-	Service "issue-tracker-backend/src/servicetemplates"
+	Server "issue-tracker-backend/src/server"
 	"net/http"
 )
 
@@ -21,14 +21,14 @@ func home(w http.ResponseWriter, r *http.Request) {
 }
 
 //Routes : an array of route bindings
-var Routes = []Service.RouteBinding{
-	Service.RouteBinding{"/api/", home, []string{"GET"}},
+var Routes = []Server.RouteBinding{
+	Server.RouteBinding{"/api/", home, []string{"GET"}},
 }
 
 var DBName = "issue-tracker"
 
-//ServiceName : service name
-var ServiceName = "Issue-api"
+//ServerName : Server name
+var ServerName = "Issue-api"
 
-//Port : service port
+//Port : Server port
 var Port = "8881"
