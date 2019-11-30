@@ -6,6 +6,7 @@ import (
 	"issue-tracker-backend/src/db"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -19,7 +20,7 @@ import (
 
 //Account : user account struct
 type Account struct {
-	UserID    primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
+	ID        primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
 	Username  string             `json:"username,omitempty"`
 	Email     string             `json:"email,omitempty"`
 	Password  string             `json:"password,omitempty"`
@@ -32,6 +33,8 @@ type Token struct {
 	UserID string `json:"UserID"`
 	jwt.StandardClaims
 }
+
+var collectionName = "accounts"
 
 func NewAccountCollection(DBConnection interface{}) *mongo.Collection {
 	return DBConnection.(*mongo.Database).Collection("accounts")
@@ -99,117 +102,17 @@ func (account *Account) _passwordValidator() (map[string]interface{}, int) {
 
 }
 
-func (account *Account) validateAccountCreation(DB *mongo.Database) (map[string]interface{}, int) {
+func (account *Account) validateAccountCreation(DBConnection interface{}) (map[string]interface{}, int) {
 
-	if resp, statusCode := account._emailValidator(DB); resp["status"] == false {
+	if resp, statusCode := account._emailValidator(DBConnection); resp["status"] == false {
 		return resp, statusCode
 	}
 
-	if resp, statusCode := account._usernameValidator(DB); resp["status"] == false {
+	if resp, statusCode := account._usernameValidator(DBConnection); resp["status"] == false {
 		return resp, statusCode
 	}
 
 	return account._passwordValidator()
-}
-
-//Create : account creation
-func (account *Account) Create(DB *mongo.Database) (map[string]interface{}, int) {
-
-	if resp, statusCode := account.validateAccountCreation(DB); resp["status"] == false {
-		return resp, statusCode
-	}
-
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
-	account.Password = string(hashedPassword)
-	account.UserID = primitive.NewObjectID()
-	account.Email = strings.ToLower(account.Email)
-	collection := NewAccountCollection(DB)
-
-	_, err := collection.InsertOne(context.TODO(), account)
-	if err != nil {
-		return u.Message(false, "Failed to create account: "+err.Error()), http.StatusInternalServerError
-	}
-
-	account.Password = "" //delete password
-
-	resp := u.Message(true, "Account has been created")
-	//resp["account"] = account
-	return resp, http.StatusCreated
-}
-
-//Login : login
-func (account *Account) Login(DB *mongo.Database) map[string]interface{} {
-
-	storedAccount := &Account{}
-
-	collection := NewAccountCollection(DB)
-
-	account.Email = strings.ToLower(account.Email)
-	emailFilter := bson.D{{"email", account.Email}}
-
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
-	err := collection.FindOne(context.TODO(), emailFilter, findOptions).Decode(&storedAccount)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to log in: Email address doesn't match any accounts in our records, please try again")
-		}
-		return u.Message(false, "Failed to log in: "+err.Error())
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(storedAccount.Password), []byte(account.Password))
-	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
-		return u.Message(false, "Invalid login credentials. Please try again")
-	}
-	//Worked! Logged In
-	account.Password = ""
-	storedAccount.Password = ""
-
-	//Create JWT token
-	tk := &Token{UserID: storedAccount.UserID.Hex()}
-	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
-	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
-
-	createdAt := storedAccount.UserID.Timestamp().String()
-	storedAccount.CreatedAt = createdAt
-
-	resp := u.Message(true, "Logged In")
-	resp["account"] = storedAccount
-	resp["token"] = tokenString
-	return resp
-}
-
-//Get : Retrieve account information
-func (account *Account) Get(authenticatedUserID string, DB *mongo.Database) (map[string]interface{}, int) {
-
-	collection := NewAccountCollection(DB)
-
-	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
-
-	userFilter := bson.D{{"username", account.Username}}
-
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
-	err := collection.FindOne(context.TODO(), userFilter, findOptions).Decode(account)
-	account.Password = ""
-
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return u.Message(false, "Failed to retrieve account: user not found"), http.StatusNotFound
-		}
-		return u.Message(false, "Failed to retrieve account: "+err.Error()), http.StatusInternalServerError
-	}
-
-	resp := u.Message(true, "")
-
-	if account.UserID == currID {
-		resp["accountOwner"] = true
-		createdAt := account.UserID.Timestamp().String()
-		account.CreatedAt = createdAt
-	} else {
-		resp["accountOwner"] = false
-		account.Email = ""
-	}
-	resp["account"] = account
-	return resp, http.StatusOK
 }
 
 func (account *Account) validateUpdate(updatedAccount map[string]string, DBConnection interface{}) (map[string]interface{}, int) {
@@ -236,17 +139,126 @@ func (account *Account) validateUpdate(updatedAccount map[string]string, DBConne
 	return u.Message(false, "No fields specified for the update or fields were identical"), http.StatusBadRequest
 }
 
+//Create : account creation
+func (account *Account) Create(DBConnection interface{}) (map[string]interface{}, int) {
+
+	if resp, statusCode := account.validateAccountCreation(DBConnection); resp["status"] == false {
+		return resp, statusCode
+	}
+
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
+	account.Password = string(hashedPassword)
+
+	account.ID = db.NewID()
+	account.Email = strings.ToLower(account.Email)
+
+	err := db.InsertOne(DBConnection, collectionName, account)
+	if err != nil {
+		return u.Message(false, "Failed to create account: "+err.Error()), http.StatusInternalServerError
+	}
+
+	resp := u.Message(true, "Account has been created")
+	return resp, http.StatusCreated
+}
+
+//Login : login
+func (account *Account) Login(DBConnection interface{}) (map[string]interface{}, int) {
+
+	account.Email = strings.ToLower(account.Email)
+
+	filterMap := map[string]interface{}{
+		"email": account.Email,
+	}
+
+	results, err := db.FindOne(DBConnection, collectionName, filterMap, nil, reflect.TypeOf(account).Elem(), false)
+	if err != nil {
+		return u.Message(false, "Failed to retrieve account: "+err.Error()), http.StatusInternalServerError
+	}
+
+	storedAccount := &Account{}
+
+	storedAccount, ok := results.(*Account)
+	if !ok {
+		return u.Message(false, "Failed to cast interface to struct: "), http.StatusInternalServerError
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(storedAccount.Password), []byte(account.Password))
+	if err != nil && err == bcrypt.ErrMismatchedHashAndPassword { //Password does not match!
+		return u.Message(false, "Invalid login credentials. Please try again"), http.StatusUnauthorized
+	}
+	//Worked! Logged In
+	account.Password = ""
+	storedAccount.Password = ""
+
+	//Create JWT token
+	tk := &Token{UserID: storedAccount.ID.Hex()}
+	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
+	tokenString, _ := token.SignedString([]byte(env.TokenPassword))
+
+	createdAt := storedAccount.ID.Timestamp().String()
+	storedAccount.CreatedAt = createdAt
+
+	resp := u.Message(true, "Logged In")
+	resp["account"] = storedAccount
+	resp["token"] = tokenString
+	return resp, http.StatusOK
+}
+
+//Get : Retrieve account information
+func (account *Account) Get(authenticatedUserID string, DBConnection interface{}) (map[string]interface{}, int) {
+
+	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
+
+	filterMap := map[string]interface{}{
+		"username": account.Username,
+	}
+
+	projectionMap := map[string]interface{}{
+		"password": 0,
+	}
+
+	results, err := db.FindOne(DBConnection, collectionName, filterMap, projectionMap, reflect.TypeOf(account).Elem(), false)
+
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return u.Message(false, "Account not found: "+err.Error()), http.StatusNotFound
+		}
+		return u.Message(false, "Failed to retrieve account: "+err.Error()), http.StatusInternalServerError
+	}
+
+	retrievedAccount := &Account{}
+	retrievedAccount, ok := results.(*Account)
+	if !ok {
+		return u.Message(false, "Failed to cast interface to struct: "), http.StatusInternalServerError
+	}
+
+	resp := u.Message(true, "")
+
+	if retrievedAccount.ID == currID {
+		resp["accountOwner"] = true
+		retrievedAccount.CreatedAt = retrievedAccount.ID.Timestamp().String()
+	} else {
+		resp["accountOwner"] = false
+		retrievedAccount.Email = ""
+	}
+	resp["account"] = retrievedAccount
+	return resp, http.StatusOK
+}
+
 //Update : Update account information
 func (account *Account) Update(DBConnection interface{}) (map[string]interface{}, int) {
 
 	updatedAccount := map[string]string{}
 
+	pv := ProjectValidators{Title: []func(interface{}, []ValidatorOption) error{StringLengthValidator}}
+
 	if resp, statusCode := account.validateUpdate(updatedAccount, DBConnection); resp["status"] == false {
 		return resp, statusCode
 	}
+
 	//this should take an array of validators
 	filterMap := map[string]interface{}{
-		"_id": account.UserID,
+		"_id": account.ID,
 	}
 
 	updateMap := map[string]interface{}{

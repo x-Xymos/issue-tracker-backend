@@ -50,13 +50,12 @@ func profile(w http.ResponseWriter, r *http.Request) {
 		userID := r.Context().Value("userID")
 		if userID != nil {
 			objID, _ := primitive.ObjectIDFromHex(userID.(string)) //converting to object id from hex needs to be moved into a function for abstraction
-			account := &AccountModel.Account{UserID: objID}
+			account := &AccountModel.Account{ID: objID}
 			err := json.NewDecoder(r.Body).Decode(account) //decode the request body into struct and failed if any error occur
 			if err != nil {
 				u.Respond(w, u.Message(false, "Invalid request"), http.StatusBadRequest)
 				return
 			}
-
 			resp, statusCode := account.Update(Server.DBConnection)
 			u.Respond(w, resp, statusCode)
 		} else {
@@ -94,9 +93,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := account.Login(Server.DBConnection)
+	resp, statusCode := account.Login(Server.DBConnection)
 
-	u.Respond(w, resp, http.StatusOK)
+	u.Respond(w, resp, statusCode)
 
 }
 

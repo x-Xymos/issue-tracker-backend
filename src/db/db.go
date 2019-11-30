@@ -55,12 +55,13 @@ func getCollection(DBConnection interface{}, collectionName string) (*mongo.Coll
 	return db.Collection(collectionName), nil
 }
 
+//NewID : Returns a new unique id
+func NewID() primitive.ObjectID {
+	return primitive.NewObjectID()
+}
+
 //FindMany : Returns many results based on supplied paramaters
-// resultStruct : interface{}
-// an empty struct used to dynamically create a struct of that type to decode the results into
-// has to be passed in as an array in order for reflect.TypeOf to work, i.e FindMany([]Struct{}...)
-//
-func FindMany(DBConnection interface{}, collectionName string, filter map[string]interface{}, resultStruct interface{}, resultLimit int64) ([]*interface{}, error) {
+func FindMany(DBConnection interface{}, collectionName string, filter map[string]interface{}, resultType reflect.Type, resultLimit int64) ([]*interface{}, error) {
 
 	var searchFilter bson.D
 	err := mapToBSON(filter, &searchFilter)
@@ -81,12 +82,10 @@ func FindMany(DBConnection interface{}, collectionName string, filter map[string
 		return nil, err
 	}
 
-	aType := reflect.TypeOf(resultStruct).Elem()
-
 	var results []*interface{}
 
 	for cur.Next(context.TODO()) {
-		elem := reflect.New(aType).Interface()
+		elem := reflect.New(resultType).Interface()
 		err := cur.Decode(elem)
 		if err != nil {
 			return nil, err
@@ -104,7 +103,7 @@ func FindMany(DBConnection interface{}, collectionName string, filter map[string
 }
 
 //FindOne : Returns one result based on search parameters
-func FindOne(DBConnection interface{}, collectionName string, filter map[string]interface{}, resultStruct interface{}, caseSensitive bool) (interface{}, error) {
+func FindOne(DBConnection interface{}, collectionName string, filter map[string]interface{}, projection map[string]interface{}, resultType reflect.Type, caseSensitive bool) (interface{}, error) {
 
 	var searchFilter bson.D
 	err := mapToBSON(filter, &searchFilter)
@@ -116,14 +115,21 @@ func FindOne(DBConnection interface{}, collectionName string, filter map[string]
 	if !caseSensitive {
 		findOptions = findOptions.SetCollation(&options.Collation{Strength: 2, Locale: "en"})
 	}
+	if projection != nil {
+		var projectionDoc bson.D
+		err = mapToBSON(projection, &projectionDoc)
+		if err != nil {
+			return nil, err
+		}
+		findOptions = findOptions.SetProjection(projectionDoc)
+	}
 
 	collection, err := getCollection(DBConnection, collectionName)
 	if err != nil {
 		return nil, err
 	}
 
-	aType := reflect.TypeOf(resultStruct).Elem()
-	result := reflect.New(aType).Interface()
+	result := reflect.New(resultType).Interface()
 
 	err = collection.FindOne(context.TODO(), searchFilter, findOptions).Decode(result)
 	if err != nil {

@@ -1,11 +1,9 @@
 package issue
 
 import (
-	u "issue-tracker-backend/src/utils"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 //Issue : Issue struct
@@ -19,17 +17,17 @@ type Issue struct {
 	DateCreated time.Time
 }
 
-func newIssueCollection(DBConn *mongo.Client) *mongo.Collection {
-	return DBConn.Database("issue-tracker").Collection("issues")
-}
+// func newIssueCollection(DBConn *mongo.Client) *mongo.Collection {
+// 	return DBConn.Database("issue-tracker").Collection("issues")
+// }
 
-func (issue *Issue) _titleValidator(DBConn *mongo.Client) map[string]interface{} {
+// func (issue *Issue) _titleValidator(DBConn *mongo.Client) map[string]interface{} {
 
-	if len(issue.Title) < 1 {
-		return u.Message(false, "Title has to be at least 1 character long")
-	}
-	return u.Message(true, "")
-}
+// 	if len(issue.Title) < 1 {
+// 		return u.Message(false, "Title has to be at least 1 character long")
+// 	}
+// 	return u.Message(true, "")
+// }
 
 // //ValidateIssueCreation :
 // func (issue *Issue) ValidateIssueCreation(DBConn *mongo.Client) map[string]interface{} {

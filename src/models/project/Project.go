@@ -4,6 +4,7 @@ import (
 	"issue-tracker-backend/src/db"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -19,6 +20,12 @@ type Project struct {
 	CreatedAt string             `json:"createdAt,omitempty" bson:"-"`
 }
 
+type ProjectValidators struct {
+	Title []func()
+}
+
+var collectionName = "projects"
+
 //Create :
 func (project *Project) Create(DBConnection interface{}) (map[string]interface{}, int) {
 
@@ -27,7 +34,7 @@ func (project *Project) Create(DBConnection interface{}) (map[string]interface{}
 	// }
 	////this should take an array of validators
 
-	project.ID = primitive.NewObjectID()
+	project.ID = db.NewID()
 
 	err := db.InsertOne(DBConnection, "projects", project)
 	if err != nil {
@@ -47,31 +54,36 @@ func (project *Project) Get(authenticatedUserID string, DBConnection interface{}
 		return u.Message(false, "Missing project title"), http.StatusBadRequest
 	}
 
-	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
 	filterMap := map[string]interface{}{
 		"title": project.Title,
 	}
 
-	results, err := db.FindOne(DBConnection, "projects", filterMap, []Project{}, false)
+	results, err := db.FindOne(DBConnection, collectionName, filterMap, nil, reflect.TypeOf(project).Elem(), false)
 
 	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return u.Message(false, "Project not found: "+err.Error()), http.StatusNotFound
+		}
 		return u.Message(false, "Failed to retrieve project: "+err.Error()), http.StatusInternalServerError
 	}
 
-	_, ok := results.(*Project)
+	retrievedProject := &Project{}
+
+	retrievedProject, ok := results.(*Project)
 	if !ok {
 		return u.Message(false, "Failed to cast interface to struct: "), http.StatusInternalServerError
 	}
 
 	resp := map[string]interface{}{}
 
-	if results.(*Project).OwnerID == currID {
+	currID, _ := primitive.ObjectIDFromHex(authenticatedUserID)
+	if retrievedProject.OwnerID == currID {
 		resp["projectOwner"] = true
-		results.(*Project).CreatedAt = results.(*Project).ID.Timestamp().String()
+		retrievedProject.CreatedAt = retrievedProject.ID.Timestamp().String()
 	} else {
 		resp["projectOwner"] = false
 	}
-	resp["project"] = results
+	resp["project"] = retrievedProject
 	resp["status"] = true
 
 	return resp, http.StatusOK
@@ -86,7 +98,7 @@ func (project *Project) GetAll(lastID string, DBConnection interface{}) (map[str
 		"title": map[string]interface{}{"$regex": map[string]string{"pattern": project.Title, "options": "i"}},
 	}
 
-	results, err := db.FindMany(DBConnection, "projects", filterMap, []Project{}, 10)
+	results, err := db.FindMany(DBConnection, "projects", filterMap, reflect.TypeOf(project).Elem(), 10)
 
 	if err != nil {
 		return u.Message(false, err.Error()), http.StatusInternalServerError
@@ -136,7 +148,7 @@ func TitleValidator(project *Project, DBConnection interface{}) (map[string]inte
 		"title": project.Title,
 	}
 
-	_, err := db.FindOne(DBConnection, "projects", filterMap, []Project{}, false)
+	_, err := db.FindOne(DBConnection, "projects", filterMap, nil, reflect.TypeOf(project).Elem(), false)
 
 	if err == mongo.ErrNoDocuments {
 		return u.Message(true, ""), 0
