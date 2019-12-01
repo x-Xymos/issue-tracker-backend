@@ -18,6 +18,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var collectionName = "accounts"
+
 //Account : user account struct
 type Account struct {
 	ID        primitive.ObjectID `json:"_id" bson:"_id,omitempty"`
@@ -33,8 +35,6 @@ type Token struct {
 	UserID string `json:"UserID"`
 	jwt.StandardClaims
 }
-
-var collectionName = "accounts"
 
 func NewAccountCollection(DBConnection interface{}) *mongo.Collection {
 	return DBConnection.(*mongo.Database).Collection("accounts")
@@ -249,8 +249,6 @@ func (account *Account) Get(authenticatedUserID string, DBConnection interface{}
 func (account *Account) Update(DBConnection interface{}) (map[string]interface{}, int) {
 
 	updatedAccount := map[string]string{}
-
-	pv := ProjectValidators{Title: []func(interface{}, []ValidatorOption) error{StringLengthValidator}}
 
 	if resp, statusCode := account.validateUpdate(updatedAccount, DBConnection); resp["status"] == false {
 		return resp, statusCode

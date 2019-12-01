@@ -2,6 +2,8 @@ package project
 
 import (
 	"issue-tracker-backend/src/db"
+	strLen "issue-tracker-backend/src/models/validators/stringLength"
+	v "issue-tracker-backend/src/models/validators/validator"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"reflect"
@@ -12,6 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+var collectionName = "projects"
+
 //Project : Project struct
 type Project struct {
 	ID        primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
@@ -20,11 +24,25 @@ type Project struct {
 	CreatedAt string             `json:"createdAt,omitempty" bson:"-"`
 }
 
-type ProjectValidators struct {
-	Title []func()
+type Validators struct {
+	Title []v.Function
 }
 
-var collectionName = "projects"
+var validators Validators
+
+func initValidators() {
+	validators.Title = v.Assign(v.Create(strLen.Validator, v.Options(strLen.Max(10))), v.Create(strLen.Validator, v.Options(strLen.Min(3))))
+}
+
+func (project *Project) validateTitle() error {
+	for _, vFunc := range validators.Title {
+		err := vFunc.Function(project.Title, vFunc.Options)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 //Create :
 func (project *Project) Create(DBConnection interface{}) (map[string]interface{}, int) {

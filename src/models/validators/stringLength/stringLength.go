@@ -2,13 +2,12 @@ package stringlength
 
 import (
 	"errors"
-	"issue-tracker-backend/src/models/validators/validator"
+	v "issue-tracker-backend/src/models/validators/validator"
 	"strconv"
 )
 
 //Validator :
-//Options : minLength int, maxLength int
-func Validator(input interface{}, options []validator.Option) error {
+func Validator(input interface{}, options []v.Option) error {
 	for _, v := range options {
 		switch v.Name {
 		case "minLength":
@@ -16,29 +15,43 @@ func Validator(input interface{}, options []validator.Option) error {
 			if !ok {
 				return errors.New("Error casting value in validator")
 			}
+
 			value, ok := v.Value.(int)
 			if !ok {
 				return errors.New("Error casting value in validator")
 			}
-
-			if !(len(input) < value) {
+			if len(input) < value {
 				return errors.New("has to be at least " + strconv.Itoa(value) + " characters long")
 			}
+
 		case "maxLength":
 			input, ok := input.(string)
 			if !ok {
 				return errors.New("Error casting value in validator")
 			}
+
 			value, ok := v.Value.(int)
 			if !ok {
 				return errors.New("Error casting value in validator")
 			}
 
-			if !(len(input) > value) {
+			if len(input) > value {
 				return errors.New("has to be less than " + strconv.Itoa(value) + " characters long")
 			}
 
+		default:
+			return errors.New("Error, option unsupported by this validation function")
 		}
 	}
 	return nil
+}
+
+//Min :
+func Min(value interface{}) v.Option {
+	return v.Option{Name: "minLength", Value: value}
+}
+
+//Max :
+func Max(value interface{}) v.Option {
+	return v.Option{Name: "maxLength", Value: value}
 }
