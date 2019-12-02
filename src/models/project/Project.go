@@ -25,7 +25,7 @@ type Project struct {
 }
 
 type Validators struct {
-	Title []v.Function
+	Title *[]*v.Function
 }
 
 var validators Validators
@@ -35,7 +35,7 @@ func initValidators() {
 }
 
 func (project *Project) validateTitle() error {
-	for _, vFunc := range validators.Title {
+	for _, vFunc := range *validators.Title {
 		err := vFunc.Function(project.Title, vFunc.Options)
 		if err != nil {
 			return err
