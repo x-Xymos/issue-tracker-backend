@@ -129,12 +129,18 @@ func FindOne(DBConnection interface{}, collectionName string, filter map[string]
 		return nil, err
 	}
 
-	result := reflect.New(resultType).Interface()
+	singleResult := collection.FindOne(context.TODO(), searchFilter, findOptions)
 
-	err = collection.FindOne(context.TODO(), searchFilter, findOptions).Decode(result)
-	if err != nil {
-		return nil, err
+	if singleResult.Err() != nil {
+		return nil, singleResult.Err()
 	}
+
+	if resultType == nil {
+		return nil, nil
+	}
+	result := reflect.New(resultType).Interface()
+	singleResult.Decode(result)
+
 	return result, nil
 }
 

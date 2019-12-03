@@ -140,6 +140,10 @@ var Routes = []Server.RouteBinding{
 	Server.RouteBinding{"/api/projects", projects, []string{"GET"}},
 }
 
+//InitValidators : pointer to the function that initializes the validators for the account models, this is ran before the server starts
+var InitValidators = ProjectModel.InitValidators
+
+//DBName : name of the database used by the service
 var DBName = "issue-tracker"
 
 //ServerName : Server name

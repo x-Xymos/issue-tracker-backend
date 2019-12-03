@@ -1,6 +1,7 @@
 package issue
 
 import (
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -15,6 +16,10 @@ type Issue struct {
 	Body        string             `json:"body"`
 	Tags        string             `json:"tags"`
 	DateCreated time.Time
+}
+
+func InitValidators(DBConnection interface{}) {
+	fmt.Println("")
 }
 
 // func newIssueCollection(DBConn *mongo.Client) *mongo.Collection {

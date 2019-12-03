@@ -6,5 +6,5 @@ import (
 )
 
 func main() {
-	Server.Start(&Controller.Routes, &Controller.Port, &Controller.ServerName, &Controller.DBName)
+	Server.Start(&Controller.Routes, &Controller.Port, &Controller.ServerName, &Controller.DBName, Controller.InitValidators)
 }

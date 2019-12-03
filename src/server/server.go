@@ -35,10 +35,11 @@ func Stop() {
 //Start : start server
 //requires a routes array containing all
 //the RouteBindings that this service will accept
-func Start(routes *[]RouteBinding, port *string, serviceName *string, DBName *string) {
+func Start(routes *[]RouteBinding, port *string, serviceName *string, DBName *string, InitValidators func(interface{})) {
 	ctx, cancel = context.WithCancel(context.Background())
 
 	DBConnection = db.Connect(DBName)
+	InitValidators(DBConnection)
 
 	Router = mux.NewRouter().StrictSlash(true)
 	Router.Use(auth.JwtAuthentication) //attach JWT auth middleware

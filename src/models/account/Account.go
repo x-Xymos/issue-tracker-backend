@@ -1,24 +1,23 @@
 package account
 
 import (
-	"context"
 	"issue-tracker-backend/env"
 	"issue-tracker-backend/src/db"
+	strLen "issue-tracker-backend/src/models/validators/stringLength"
+	"issue-tracker-backend/src/models/validators/unique"
+	v "issue-tracker-backend/src/models/validators/validator"
 	u "issue-tracker-backend/src/utils"
 	"net/http"
 	"reflect"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/dgrijalva/jwt-go"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
-var collectionName = "accounts"
+const collectionName = "accounts"
 
 //Account : user account struct
 type Account struct {
@@ -36,97 +35,88 @@ type Token struct {
 	jwt.StandardClaims
 }
 
-func NewAccountCollection(DBConnection interface{}) *mongo.Collection {
-	return DBConnection.(*mongo.Database).Collection("accounts")
+type Validators struct {
+	Username *[]*v.Function
+	Email    *[]*v.Function //todo add an email validator
+	Password *[]*v.Function
 }
 
-func (account *Account) _emailValidator(DBConnection interface{}) (map[string]interface{}, int) {
+var validators Validators
 
-	account.Email = strings.ReplaceAll(account.Email, " ", "")
-	if !strings.Contains(account.Email, "@") || utf8.RuneCountInString(account.Email) < 5 {
-		return u.Message(false, "Invalid email address"), http.StatusBadRequest
+func InitValidators(DBConnection interface{}) {
+	validators.Username = v.Assign(
+		v.Create(strLen.Validator, v.Options(strLen.Max(16), strLen.Min(3))),
+		v.Create(unique.Validator, v.Options(unique.CaseSensitive(false), unique.Collection(collectionName), unique.Database(DBConnection), unique.SearchField("username"))))
+
+	validators.Email = v.Assign(
+		v.Create(strLen.Validator, v.Options(strLen.Max(32), strLen.Min(5))),
+		v.Create(unique.Validator, v.Options(unique.CaseSensitive(false), unique.Collection(collectionName), unique.Database(DBConnection), unique.SearchField("email"))))
+
+	validators.Password = v.Assign(
+		v.Create(strLen.Validator, v.Options(strLen.Max(32), strLen.Min(6))))
+
+}
+
+//todo can we make a function for the loop part that just takes in those params???
+func (account *Account) validateUsername() error {
+	for _, vFunc := range *validators.Username {
+		err := vFunc.Function(account.Username, vFunc.Options)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (account *Account) validateEmail() error {
+	for _, vFunc := range *validators.Email {
+		err := vFunc.Function(account.Email, vFunc.Options)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (account *Account) validatePassword() error {
+	for _, vFunc := range *validators.Password {
+		err := vFunc.Function(account.Password, vFunc.Options)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (account *Account) validateAccountCreation() (map[string]interface{}, int) {
+
+	if err := account.validateEmail(); err != nil {
+		return map[string]interface{}{"status": false, "message": err.Error(), "badField": "email"}, http.StatusBadRequest
 	}
 
-	tempAcc := &Account{}
-	collection := NewAccountCollection(DBConnection)
-
-	//Email must be unique
-	emailFilter := bson.D{{"email", account.Email}}
-
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
-	err := collection.FindOne(context.TODO(), emailFilter, findOptions).Decode(&tempAcc)
-	if err != nil && err != mongo.ErrNoDocuments {
-		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
+	if err := account.validateUsername(); err != nil {
+		return map[string]interface{}{"status": false, "message": err.Error(), "badField": "username"}, http.StatusBadRequest
 	}
 
-	if tempAcc.Email != "" {
-		return u.Message(false, "Email address already in use by another user"), http.StatusBadRequest
+	if err := account.validatePassword(); err != nil {
+		return map[string]interface{}{"status": false, "message": err.Error(), "badField": "password"}, http.StatusBadRequest
 	}
+
 	return u.Message(true, ""), 0
 }
 
-func (account *Account) _usernameValidator(DBConnection interface{}) (map[string]interface{}, int) {
-
-	account.Username = strings.ReplaceAll(account.Username, " ", "")
-
-	if utf8.RuneCountInString(account.Username) < 3 {
-		return u.Message(false, "Username has to be at least 3 characters long"), http.StatusBadRequest
-	}
-
-	tempAcc := &Account{}
-	collection := NewAccountCollection(DBConnection)
-	//Username must be unique
-	usernameFilter := bson.D{{"username", account.Username}}
-
-	findOptions := options.FindOne().SetCollation(&options.Collation{Strength: 2, Locale: "en"})
-	err := collection.FindOne(context.TODO(), usernameFilter, findOptions).Decode(&tempAcc)
-
-	if err != mongo.ErrNoDocuments && err != nil {
-		return u.Message(false, "Connection error, please try again"), http.StatusInternalServerError
-	}
-
-	if tempAcc.Username != "" {
-		return u.Message(false, "Username already in use by another user"), http.StatusBadRequest
-	}
-	return u.Message(true, ""), 0
-}
-
-func (account *Account) _passwordValidator() (map[string]interface{}, int) {
-
-	account.Password = strings.ReplaceAll(account.Password, " ", "")
-
-	if utf8.RuneCountInString(account.Password) < 6 {
-		return u.Message(false, "Password has to be at least 6 characters long"), http.StatusBadRequest
-	}
-	return u.Message(true, ""), 0
-
-}
-
-func (account *Account) validateAccountCreation(DBConnection interface{}) (map[string]interface{}, int) {
-
-	if resp, statusCode := account._emailValidator(DBConnection); resp["status"] == false {
-		return resp, statusCode
-	}
-
-	if resp, statusCode := account._usernameValidator(DBConnection); resp["status"] == false {
-		return resp, statusCode
-	}
-
-	return account._passwordValidator()
-}
-
-func (account *Account) validateUpdate(updatedAccount map[string]string, DBConnection interface{}) (map[string]interface{}, int) {
+func (account *Account) validateUpdate(updatedAccount map[string]string) (map[string]interface{}, int) {
 
 	if account.Email != "" {
-		if resp, statusCode := account._emailValidator(DBConnection); resp["status"] == false {
-			return resp, statusCode
+		if err := account.validateEmail(); err != nil {
+			return map[string]interface{}{"status": false, "message": err.Error(), "badField": "email"}, http.StatusBadRequest
 		}
 		updatedAccount["email"] = strings.ToLower(account.Email)
 	}
 
 	if account.Username != "" {
-		if resp, statusCode := account._usernameValidator(DBConnection); resp["status"] == false {
-			return resp, statusCode
+		if err := account.validateUsername(); err != nil {
+			return map[string]interface{}{"status": false, "message": err.Error(), "badField": "username"}, http.StatusBadRequest
 		}
 		updatedAccount["username"] = account.Username
 	}
@@ -142,7 +132,7 @@ func (account *Account) validateUpdate(updatedAccount map[string]string, DBConne
 //Create : account creation
 func (account *Account) Create(DBConnection interface{}) (map[string]interface{}, int) {
 
-	if resp, statusCode := account.validateAccountCreation(DBConnection); resp["status"] == false {
+	if resp, statusCode := account.validateAccountCreation(); resp["status"] == false {
 		return resp, statusCode
 	}
 
@@ -250,7 +240,7 @@ func (account *Account) Update(DBConnection interface{}) (map[string]interface{}
 
 	updatedAccount := map[string]string{}
 
-	if resp, statusCode := account.validateUpdate(updatedAccount, DBConnection); resp["status"] == false {
+	if resp, statusCode := account.validateUpdate(updatedAccount); resp["status"] == false {
 		return resp, statusCode
 	}
 

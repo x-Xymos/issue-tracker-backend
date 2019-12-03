@@ -14,7 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var collectionName = "projects"
+const collectionName = "projects"
 
 //Project : Project struct
 type Project struct {
@@ -30,7 +30,7 @@ type Validators struct {
 
 var validators Validators
 
-func initValidators() {
+func InitValidators(DBConnection interface{}) {
 	validators.Title = v.Assign(v.Create(strLen.Validator, v.Options(strLen.Max(10))), v.Create(strLen.Validator, v.Options(strLen.Min(3))))
 }
 
