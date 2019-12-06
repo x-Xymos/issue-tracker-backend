@@ -3,21 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
-	"issue-tracker-backend/src/auth"
+	"issue-tracker-backend/src/db"
+	"issue-tracker-backend/src/middleware/auth"
 	AccountModel "issue-tracker-backend/src/models/account"
-	Controller "issue-tracker-backend/src/services/account-api/controllers"
-	Service "issue-tracker-backend/src/servicetemplates"
-	"issue-tracker-backend/src/servicetemplates/db"
+	Service "issue-tracker-backend/src/server"
+	Controller "issue-tracker-backend/src/services/account-api"
 	u "issue-tracker-backend/src/utils"
 	tu "issue-tracker-backend/tests/testUtils"
 	"log"
 	"os"
 	"testing"
 
-	"go.mongodb.org/mongo-driver/mongo"
-
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -30,9 +29,10 @@ type AddedAccount struct {
 
 var AddedAccounts []AddedAccount
 
+// used to create some initial accounts for testing
 func (account *AddedAccount) create(email string, username string, password string) {
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	account.Account = AccountModel.Account{UserID: primitive.NewObjectID(), Email: email, Username: username, Password: string(hashedPassword)}
+	account.Account = AccountModel.Account{ID: primitive.NewObjectID(), Email: email, Username: username, Password: string(hashedPassword)}
 }
 
 func clearDatabase(DB *mongo.Database) {
@@ -41,7 +41,9 @@ func clearDatabase(DB *mongo.Database) {
 }
 
 func TestMain(m *testing.M) {
-	Service.DB = db.Connect().Database("test")
+
+	DBName := "test"
+	Service.DBConnection = db.Connect(&DBName)
 
 	Router = mux.NewRouter().StrictSlash(true)
 	Router.Use(auth.JwtAuthentication) //attach JWT auth middleware
@@ -69,7 +71,7 @@ func TestMain(m *testing.M) {
 
 	accounts := []interface{}{AddedAccounts[0].Account, AddedAccounts[1].Account, AddedAccounts[2].Account}
 
-	collection := AccountModel.NewAccountCollection(Service.DB)
+	collection := AccountModel.NewAccountCollection(Service.DBConnection)
 
 	_, err := collection.InsertMany(context.TODO(), accounts)
 	if err != nil {
@@ -77,7 +79,7 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
-	clearDatabase(Service.DB)
+	clearDatabase(Service.DBConnection)
 	os.Exit(code)
 }
 
