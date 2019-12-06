@@ -13,7 +13,6 @@ https://docs.mongodb.com/manual/installation/
 
 The backend connects to the database using the default port
 # clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-If you want to change this, edit the URI in src/servicetemplates/db/db.go
 
 # run the backend
 make -B && make run
