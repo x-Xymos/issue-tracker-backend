@@ -1,7 +1,8 @@
 package account
 
 import (
-	strLen "issue-tracker-backend/src/models/validators/stringLength"
+	strMaxLength "issue-tracker-backend/src/models/validators/string/maxLength"
+	strMinLength "issue-tracker-backend/src/models/validators/string/minLength"
 	"issue-tracker-backend/src/models/validators/unique"
 	v "issue-tracker-backend/src/models/validators/validator"
 	u "issue-tracker-backend/src/utils"
@@ -9,33 +10,30 @@ import (
 	"strings"
 )
 
-type Validators struct {
-	Username *[]*v.Function
-	Email    *[]*v.Function //todo add an email validator
-	Password *[]*v.Function
-}
-
-var validators Validators
+var usernameValidators v.Validators
+var emailValidators v.Validators
+var passwordValidators v.Validators
 
 //InitValidators :
 func InitValidators(DBConnection interface{}) {
-	validators.Username = v.Assign(
-		v.Create(strLen.Validator, v.Options(strLen.Max(16), strLen.Min(3))),
+	usernameValidators = v.Assign(
+		v.Create(strMaxLength.Validator, strMaxLength.Options(16)),
+		v.Create(strMinLength.Validator, strMinLength.Options(3)),
 		v.Create(unique.Validator, unique.Options(DBConnection, collectionName, "username", false)))
 
-	validators.Email = v.Assign(
-		v.Create(strLen.Validator, v.Options(strLen.Max(32), strLen.Min(5))),
+	emailValidators = v.Assign(
+		v.Create(strMaxLength.Validator, strMaxLength.Options(32)),
+		v.Create(strMinLength.Validator, strMinLength.Options(5)),
 		v.Create(unique.Validator, unique.Options(DBConnection, collectionName, "email", false)))
 
-	validators.Password = v.Assign(
-		v.Create(strLen.Validator, v.Options(strLen.Max(32), strLen.Min(6))))
-
+	passwordValidators = v.Assign(
+		v.Create(strMaxLength.Validator, strMaxLength.Options(32)),
+		v.Create(strMinLength.Validator, strMinLength.Options(6)))
 }
 
-//todo can we make a function for the loop part that just takes in those params???
 func (account *Account) validateUsername() error {
-	for _, vFunc := range *validators.Username {
-		err := vFunc.Function(account.Username, vFunc.Options)
+	for _, validator := range *usernameValidators {
+		err := validator.Validate(account.Username, validator.Options)
 		if err != nil {
 			return err
 		}
@@ -44,8 +42,8 @@ func (account *Account) validateUsername() error {
 }
 
 func (account *Account) validateEmail() error {
-	for _, vFunc := range *validators.Email {
-		err := vFunc.Function(account.Email, vFunc.Options)
+	for _, validator := range *emailValidators {
+		err := validator.Validate(account.Email, validator.Options)
 		if err != nil {
 			return err
 		}
@@ -54,8 +52,8 @@ func (account *Account) validateEmail() error {
 }
 
 func (account *Account) validatePassword() error {
-	for _, vFunc := range *validators.Password {
-		err := vFunc.Function(account.Password, vFunc.Options)
+	for _, validator := range *passwordValidators {
+		err := validator.Validate(account.Password, validator.Options)
 		if err != nil {
 			return err
 		}

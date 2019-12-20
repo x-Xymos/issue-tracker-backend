@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-//Validator :
+//Validator : Tests if the field entry is unique to the database collection
 func Validator(input interface{}, options *[]*v.Option) error {
 
 	_options := make(map[string]interface{})

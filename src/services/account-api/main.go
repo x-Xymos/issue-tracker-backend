@@ -1,4 +1,4 @@
-package accountapi
+package main
 
 import (
 	AccountModel "issue-tracker-backend/src/models/account"

@@ -1,8 +1,10 @@
 package validator
 
+type Validators *[]*Function
+
 //Function :
 type Function struct {
-	Function func(interface{}, *[]*Option) error
+	Validate func(interface{}, *[]*Option) error
 	Options  *[]*Option
 }
 
@@ -14,12 +16,12 @@ type Option struct {
 
 //Create :
 func Create(function func(interface{}, *[]*Option) error, options *[]*Option) *Function {
-	return &Function{Function: function, Options: options}
+	return &Function{Validate: function, Options: options}
 }
 
 //Assign :
 //Returns an array of validation functions that can be used on a variable
-func Assign(functions ...*Function) *[]*Function {
+func Assign(functions ...*Function) Validators {
 	funcArr := &[]*Function{}
 	for _, v := range functions {
 		*funcArr = append(*funcArr, v)
